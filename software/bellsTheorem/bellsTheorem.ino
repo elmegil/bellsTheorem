@@ -2,6 +2,7 @@
 
 #include <Wire.h>
 #include <Bounce2.h>
+//#include <ADC.h> // super complex and not very well documented afaict
 
 #define DEBUG 1
 
@@ -14,15 +15,6 @@
 #define XPCHAN0 0x04 
 #define XPCHAN1 0x05
 #define XPCHAN_NONE 0x00
-
-
-long long intermediate;
-const unsigned short maximumOutput = 0x3FF; //1023
-unsigned short inputValue = maximumOutput;
-// these are not needed, only ever calculate between two lenses, just divide by 1000
-//const int oneLens = 1000;
-//const int twoLens = 1000000;
-//const int threeLens = 1000000000;
 
 /*
  * DAC -> output mapping
@@ -52,16 +44,12 @@ byte addr[13][3] = { { 0, 0x61, 0x00},
                       { 0, 0x63, 0x00},
                       { 1, 0x60, 0x00} };
 
+const unsigned short maximumOutput = 0x3FF; //1023
 // we start at 0 degrees, so everything is maxed out (until such time as we start taking input)
 short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
                     maximumOutput, maximumOutput, maximumOutput, maximumOutput,
                     maximumOutput, maximumOutput, maximumOutput, maximumOutput,
                     maximumOutput };
-
-const short angleScale = 2; // scale the encoder magnitude, otherwise you spend forever to go 180 degrees
-long angle[4] = { 0, 0, 0, 0 };  // absolute angle of each encoder
-long savedAngle[4] = { 0, 0, 0, 0 }; // "undo" of unintentional clicks
-long relativeAngle[4] = { 0, 0, 0, 0 }; // relative angle of each pair A->B, B->C, C->D, D-A[]
 
 // other pins used
 // latch the DACs
@@ -79,6 +67,11 @@ long relativeAngle[4] = { 0, 0, 0, 0 }; // relative angle of each pair A->B, B->
 #define ENCDA 15
 #define ENCDB 14
 #define SWD 16
+#define CVA A15
+#define CVB A16
+#define CVC A10
+#define CVD A11
+#define CV_IN 38
 
 #define LEFTSIDE 0
 #define RIGHTSIDE 1
@@ -86,7 +79,7 @@ long relativeAngle[4] = { 0, 0, 0, 0 }; // relative angle of each pair A->B, B->
 
 // stuff for bell's Theorem testing
 // fixed point, 3 digit representation of cosine squared, for integer angles 0 - 90
-unsigned short cos2Table[] = {
+unsigned short cos2Table[] = { // 3E8 == 1000 decimal
   0x3E8,0x3E8,0x3E6,0x3E6,0x3E4,0x3E0,0x3DE,0x3DA,0x3D4,0x3D0,
   0x3CA,0x3C4,0x3BC,0x3B5,0x3AD,0x3A5,0x39C,0x392,0x388,0x37F,
   0x374,0x368,0x35B,0x350,0x343,0x335,0x328,0x31A,0x30C,0x2FE,
@@ -109,13 +102,30 @@ const bool ENC_DIRECTION = 0;//this can be changed in options for wrong way enco
 
 int enc_buttons[4] = { HIGH, HIGH, HIGH, HIGH }; //normal state
 unsigned long enc_button_timers[4] = { 0, 0, 0, 0 };  // milliseconds need big numbers
-byte enc_button_pins[4] = { 21, 1, 6, 16 };
+byte enc_button_pins[4] = { SWA, SWB, SWC, SWD };
 Bounce debA=Bounce();
 Bounce debB=Bounce();
 Bounce debC=Bounce();
 Bounce debD=Bounce();
 Bounce *debounce[4] = {&debA, &debB, &debC, &debD} ; 
 
+byte cv_in_pins[4] = { CVA, CVB, CVC, CVD };
+long cv_values[4] = { 0, 0, 0, 0 };
+
+long long intermediate;
+unsigned short inputValue = maximumOutput;                    
+
+const short angleScale = 2; // scale the encoder magnitude, otherwise you spend forever to go 180 degrees
+long angle[4] = { 0, 0, 0, 0 };  // absolute angle of each encoder
+long savedAngle[4] = { 0, 0, 0, 0 }; // "undo" of unintentional clicks
+long relativeAngle[4] = { 0, 0, 0, 0 }; // relative angle of each pair A->B, B->C, C->D, D-A[]
+
+long angle_sum[4] = { 0, 0, 0, 0 }; // hold angle + cv
+
+// try some tricks to force inlining of simple functions  -- but doesn't seem to make much difference?
+inline int mod( int x, int y ) __attribute__((always_inline));
+inline long constrainAngle(long angle) __attribute__((always_inline));
+inline short constrainCos2(short angle) __attribute__((always_inline));
 
 //
 // intermediate = inputValue * cos2Table[0] * cos2Table[0] * cos2Table[0]
@@ -130,8 +140,15 @@ void setup() {
     debounce[i]->attach(enc_button_pins[i], INPUT_PULLUP);
     debounce[i]->interval(25); // 25ms ebounce time
   }
+
+  for (int i=0; i<4; i++) {
+    pinMode(cv_in_pins[i], INPUT);
+  }
+  analogReadRes(10); // 10 bit resolution
+  analogReadAveraging(3); // just pick a number to try and reduce jitter
   
   Serial.begin(115200);
+  Serial.println("Bell's Theorem startup");
   Serial.println(SDA);
   Serial.println(SCL);
 
@@ -141,7 +158,7 @@ void setup() {
   while (Wire.available()) {
     xpstatus = Wire.read();
   }  
-  Serial.println(xpstatus); // should be all zeroes at this point
+  //Serial.println(xpstatus); // should be all zeroes at this point
   for (int i = 0; i<13; i++) {  // max everyone out to start because all angles are 0
     selectSide(addr[i][0]);
     sendValue(addr[i][1], addr[i][2], maximumOutput);
@@ -150,11 +167,16 @@ void setup() {
   selectSide(LEFTSIDE);     // set as default state
 }
 
+// for checking loop times
+long lastMillis = 0;
+long curMillis = 0;
 
 void loop() {  
   long tempEnc;
-  short relAngle;
 
+  curMillis = micros();
+  Serial.print("loop time: "); Serial.print(curMillis - lastMillis); Serial.println();
+  lastMillis=curMillis;
   // use duration() method later for mode changes
   //Serial.println("updating buttons");
   for (int i=0; i < 4; i++) {
@@ -172,58 +194,53 @@ void loop() {
   }
 
   for (int i = 0; i < 4; i++) {  //update angles
-    tempEnc = angle[i] + read_rotary(i) * angleScale;
-    if (tempEnc > 180) {
-      tempEnc -= 180;
-    } else if (tempEnc < -180) {
-      tempEnc += 180;
-    }
+    tempEnc = constrainAngle(angle[i] + read_rotary(i) * angleScale);
     angle[i] = tempEnc;
+  }
+
+  for (int i = 0; i < 4; i++) {
+    cv_values[i] = (long)(analogRead(cv_in_pins[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
+    angle_sum[i] = constrainAngle(cv_values[i] + angle [i]);
   }
 
 //  Serial.print("angle ");
 //  for (int x=0; x<4; x++) { Serial.print(angle[x]); Serial.print(" "); } Serial.println();
     
-    // ok angle is set, now check the relationship to adjacent lenses
-  for (int i = 0; i < 4; i++) { 
-    relAngle = angle[mod(i+1,4)] - angle[i]; // maximum difference is 360
-    if (relAngle > 180) {
-      relAngle -= 180;
-    } else if (relAngle < -180) {
-      relAngle += 180;
-    }
-    relativeAngle[i] = relAngle;
-    relAngle = angle[i] - angle[mod(i-1,4)];
-    if (relAngle > 180) {
-      relAngle -= 180;
-    } else if (relAngle < -180) {
-      relAngle += 180;
-    }
-    relativeAngle[mod(i-1,4)] = relAngle;
+  // ok angle is set, now check the relationship to adjacent lenses
+  for (int i = 0; i < 4; i++) {  
+    relativeAngle[i] = constrainAngle(angle_sum[mod(i+1,4)] - angle_sum[i]); // maximum difference is 360
+    relativeAngle[mod(i-1,4)] = constrainAngle(angle_sum[i] - angle_sum[mod(i-1,4)]);
   }
   
 //  Serial.print("relativeAngle ");
 //  for (int x=0; x<4; x++) { Serial.print(relativeAngle[x]); Serial.print(" "); } Serial.println();
 
-  for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles
-    intermediate = inputValue * cos2Table[abs(90 - abs(abs(angle[i]) - 90))]; // abs(90 - abs( x - 90 )) reflects 0 - 180 to 0-90,90-0
+  inputValue = analogRead(CV_IN);
+  
+  for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles + the CV inputs
+    intermediate = inputValue * cos2Table[constrainCos2(angle_sum[i])]; 
     // ultimately this will actually just be A/B/C/D no value + 4
-    value[i+4] = (short)(intermediate / 1000);                          // and 0 - (-180) to the same
+    value[i] = (short)(intermediate / 1000);                          
+    selectSide(addr[i][0]);
+    sendValue(addr[i][1], addr[i][2], value[i]);
+    
+    intermediate = value[i] * cos2Table[constrainCos2(relativeAngle[i])];
+    value[i+4] = (short)(intermediate / 1000);
     selectSide(addr[i+4][0]);
     sendValue(addr[i+4][1], addr[i+4][2], value[i+4]);
-    
-    intermediate = value[i+4] * cos2Table[abs(90 - abs(abs(relativeAngle[i]) - 90))];
+
+    intermediate = value[i+4] * cos2Table[constrainCos2(relativeAngle[mod(i+1,4)])];
     value[i+8] = (short)(intermediate / 1000);
     selectSide(addr[i+8][0]);
     sendValue(addr[i+8][1], addr[i+8][2], value[i+8]);
-
-    intermediate = value[i+4] * cos2Table[abs(90 - abs(abs(relativeAngle[mod(i-1,4)]) - 90))];
-    value[mod(i-1,4)+8] = (short)(intermediate / 1000);
-    selectSide(addr[mod(i-1,4)+8][0]);
-    sendValue(addr[mod(i-1,4)+8][1], addr[mod(i-1,4)+8][2], value[mod(i-1,4)+8]);
 //    Serial.print("value ");
 //    for (int x=0; x<13; x++) { Serial.print(value[x]); Serial.print(" "); } Serial.println();
   }
+  // still gotta do ABCD
+  intermediate = value[8] * cos2Table[constrainCos2(relativeAngle[2])];
+  value[12] = (short)(intermediate/1000);
+  selectSide(addr[12][0]);
+  sendValue(addr[12][1], addr[12][2], value[12]);
 }
 
 void selectSide(byte side) {
@@ -270,8 +287,22 @@ void sendValue(byte dac, byte unit, short value) {
   digitalWriteFast(LATCH, HIGH);
 }
 
+// abs(90 - abs( x - 90 )) reflects 0 - 180 to 0-90,90-0 and 0 - (-180) to the same
+inline short constrainCos2(short angle) {
+  return (abs(90 - abs(abs(angle) - 90)));
+}
+
+inline long constrainAngle(long angle) {  // limit angles to -180 to +180
+  if (angle > 180) {
+      angle -= 180;
+  } else if (angle < -180) {
+      angle += 180;
+  }
+  return(angle);
+}
+
 // funky modulus appropriate for wrapping at 0, instead of -modulus; good for wrapping around arrays
-int mod( int x, int y ){
+inline int mod( int x, int y ){
    return x<0 ? ((x+1)%y)+y-1 : x%y;
 }
 
