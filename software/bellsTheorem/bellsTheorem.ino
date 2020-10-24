@@ -123,9 +123,9 @@ long relativeAngle[4] = { 0, 0, 0, 0 }; // relative angle of each pair A->B, B->
 long angle_sum[4] = { 0, 0, 0, 0 }; // hold angle + cv
 
 // try some tricks to force inlining of simple functions  -- but doesn't seem to make much difference?
-inline int mod( int x, int y ) __attribute__((always_inline));
-inline long constrainAngle(long angle) __attribute__((always_inline));
-inline short constrainCos2(short angle) __attribute__((always_inline));
+//inline int mod( int x, int y ) __attribute__((always_inline));
+//inline long constrainAngle(long angle) __attribute__((always_inline));
+//inline short constrainCos2(short angle) __attribute__((always_inline));
 
 //
 // intermediate = inputValue * cos2Table[0] * cos2Table[0] * cos2Table[0]
@@ -168,15 +168,13 @@ void setup() {
 }
 
 // for checking loop times
-long lastMillis = 0;
-long curMillis = 0;
+long lastMicros = 0;
+long curMicros = 0;
 
 void loop() {  
-  long tempEnc;
-
-  curMillis = micros();
-  Serial.print("loop time: "); Serial.print(curMillis - lastMillis); Serial.println();
-  lastMillis=curMillis;
+  curMicros = micros();
+  Serial.print("loop time: "); Serial.print(curMicros - lastMicros); Serial.println();
+  lastMicros=curMicros;
   // use duration() method later for mode changes
   //Serial.println("updating buttons");
   for (int i=0; i < 4; i++) {
@@ -191,54 +189,39 @@ void loop() {
         savedAngle[i] = 0;
       }
     }
-  }
 
-  for (int i = 0; i < 4; i++) {  //update angles
-    tempEnc = constrainAngle(angle[i] + read_rotary(i) * angleScale);
-    angle[i] = tempEnc;
-  }
+    angle[i] = constrainAngle(angle[i] + read_rotary(i) * angleScale);
 
-  for (int i = 0; i < 4; i++) {
     cv_values[i] = (long)(analogRead(cv_in_pins[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
-    angle_sum[i] = constrainAngle(cv_values[i] + angle [i]);
+    angle_sum[i] = constrainAngle(cv_values[i] + angle[i]);
   }
-
-//  Serial.print("angle ");
-//  for (int x=0; x<4; x++) { Serial.print(angle[x]); Serial.print(" "); } Serial.println();
-    
+   
   // ok angle is set, now check the relationship to adjacent lenses
   for (int i = 0; i < 4; i++) {  
     relativeAngle[i] = constrainAngle(angle_sum[mod(i+1,4)] - angle_sum[i]); // maximum difference is 360
-    relativeAngle[mod(i-1,4)] = constrainAngle(angle_sum[i] - angle_sum[mod(i-1,4)]);
   }
-  
-//  Serial.print("relativeAngle ");
-//  for (int x=0; x<4; x++) { Serial.print(relativeAngle[x]); Serial.print(" "); } Serial.println();
 
-  inputValue = analogRead(CV_IN);
+  inputValue = analogRead(CV_IN); 
   
   for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles + the CV inputs
-    intermediate = inputValue * cos2Table[constrainCos2(angle_sum[i])]; 
-    // ultimately this will actually just be A/B/C/D no value + 4
-    value[i] = (short)(intermediate / 1000);                          
+    // intermediate = inputValue * cos2Table[constrainCos2(angle_sum[i])]; 
+    value[i] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[i])]) / 1000);                          
     selectSide(addr[i][0]);
     sendValue(addr[i][1], addr[i][2], value[i]);
     
-    intermediate = value[i] * cos2Table[constrainCos2(relativeAngle[i])];
-    value[i+4] = (short)(intermediate / 1000);
+    //intermediate = value[i] * cos2Table[constrainCos2(relativeAngle[i])];
+    value[i+4] = (short)((value[i] * cos2Table[constrainCos2(relativeAngle[i])]) / 1000);
     selectSide(addr[i+4][0]);
     sendValue(addr[i+4][1], addr[i+4][2], value[i+4]);
 
-    intermediate = value[i+4] * cos2Table[constrainCos2(relativeAngle[mod(i+1,4)])];
-    value[i+8] = (short)(intermediate / 1000);
+    //intermediate = value[i+4] * cos2Table[constrainCos2(relativeAngle[mod(i+1,4)])];
+    value[i+8] = (short)((value[i+4] * cos2Table[constrainCos2(relativeAngle[mod(i+1,4)])]) / 1000);
     selectSide(addr[i+8][0]);
     sendValue(addr[i+8][1], addr[i+8][2], value[i+8]);
-//    Serial.print("value ");
-//    for (int x=0; x<13; x++) { Serial.print(value[x]); Serial.print(" "); } Serial.println();
   }
   // still gotta do ABCD
-  intermediate = value[8] * cos2Table[constrainCos2(relativeAngle[2])];
-  value[12] = (short)(intermediate/1000);
+  // intermediate = value[8] * cos2Table[constrainCos2(relativeAngle[2])];
+  value[12] = (short)((value[8] * cos2Table[constrainCos2(relativeAngle[2])])/1000);
   selectSide(addr[12][0]);
   sendValue(addr[12][1], addr[12][2], value[12]);
 }
@@ -288,11 +271,11 @@ void sendValue(byte dac, byte unit, short value) {
 }
 
 // abs(90 - abs( x - 90 )) reflects 0 - 180 to 0-90,90-0 and 0 - (-180) to the same
-inline short constrainCos2(short angle) {
+short constrainCos2(short angle) {
   return (abs(90 - abs(abs(angle) - 90)));
 }
 
-inline long constrainAngle(long angle) {  // limit angles to -180 to +180
+long constrainAngle(long angle) {  // limit angles to -180 to +180
   if (angle > 180) {
       angle -= 180;
   } else if (angle < -180) {
@@ -302,8 +285,8 @@ inline long constrainAngle(long angle) {  // limit angles to -180 to +180
 }
 
 // funky modulus appropriate for wrapping at 0, instead of -modulus; good for wrapping around arrays
-inline int mod( int x, int y ){
-   return x<0 ? ((x+1)%y)+y-1 : x%y;
+int mod( int x, int y ){
+   return (x<0 ? ((x+1)%y)+y-1 : x%y);
 }
 
 // Jim Matheson's encoder driver
