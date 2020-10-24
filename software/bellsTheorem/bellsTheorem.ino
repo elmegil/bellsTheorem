@@ -1,6 +1,7 @@
 
 
 #include <Wire.h>
+#include <Bounce2.h>
 
 #define DEBUG 1
 
@@ -18,12 +19,14 @@
 long long intermediate;
 const unsigned short maximumOutput = 0x3FF; //1023
 unsigned short inputValue = maximumOutput;
-byte angleA, angleB, angleC, angleD; //
-const int oneLens = 1000;
-const int twoLens = 1000000;
-const int threeLens = 1000000000;
+// these are not needed, only ever calculate between two lenses, just divide by 1000
+//const int oneLens = 1000;
+//const int twoLens = 1000000;
+//const int threeLens = 1000000000;
 
 /*
+ * DAC -> output mapping
+ * 
  *  left side 0x61   dual channel   A / D
  *  left side 0x62   dual channel   B / C
  *  left side 0x63   dual channel   DAB / DA
@@ -49,6 +52,7 @@ byte addr[13][3] = { { 0, 0x61, 0x00},
                       { 0, 0x63, 0x00},
                       { 1, 0x60, 0x00} };
 
+// we start at 0 degrees, so everything is maxed out (until such time as we start taking input)
 short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
                     maximumOutput, maximumOutput, maximumOutput, maximumOutput,
                     maximumOutput, maximumOutput, maximumOutput, maximumOutput,
@@ -56,25 +60,8 @@ short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
 
 const short angleScale = 2; // scale the encoder magnitude, otherwise you spend forever to go 180 degrees
 long angle[4] = { 0, 0, 0, 0 };  // absolute angle of each encoder
+long savedAngle[4] = { 0, 0, 0, 0 }; // "undo" of unintentional clicks
 long relativeAngle[4] = { 0, 0, 0, 0 }; // relative angle of each pair A->B, B->C, C->D, D-A[]
-
-
-// for testing convenience, probably won't use these "for real"
-#define OUTA 0
-#define OUTB 1
-#define OUTC 2
-#define OUTD 3
-#define OUTAB 4
-#define OUTBC 5
-#define OUTCD 6
-#define OUTDA 7
-#define OUTABC 8
-#define OUTBCD 9
-#define OUTCDA 10
-#define OUTDAB 11
-#define OUTABCD 12
-#define LEFTSIDE 0
-#define RIGHTSIDE 1
 
 // other pins used
 // latch the DACs
@@ -92,6 +79,9 @@ long relativeAngle[4] = { 0, 0, 0, 0 }; // relative angle of each pair A->B, B->
 #define ENCDA 15
 #define ENCDB 14
 #define SWD 16
+
+#define LEFTSIDE 0
+#define RIGHTSIDE 1
 
 
 // stuff for bell's Theorem testing
@@ -117,6 +107,16 @@ static uint8_t enc_PrevNextCode[4] = {0, 0, 0, 0};//used by enc driver
 static uint16_t enc_Store[4] = {0, 0, 0, 0};//used by enc driver
 const bool ENC_DIRECTION = 0;//this can be changed in options for wrong way encoders
 
+int enc_buttons[4] = { HIGH, HIGH, HIGH, HIGH }; //normal state
+unsigned long enc_button_timers[4] = { 0, 0, 0, 0 };  // milliseconds need big numbers
+byte enc_button_pins[4] = { 21, 1, 6, 16 };
+Bounce debA=Bounce();
+Bounce debB=Bounce();
+Bounce debC=Bounce();
+Bounce debD=Bounce();
+Bounce *debounce[4] = {&debA, &debB, &debC, &debD} ; 
+
+
 //
 // intermediate = inputValue * cos2Table[0] * cos2Table[0] * cos2Table[0]
 //
@@ -125,6 +125,11 @@ const bool ENC_DIRECTION = 0;//this can be changed in options for wrong way enco
 void setup() {  
   pinMode(LATCH, OUTPUT);
   digitalWrite(LATCH, HIGH); // latch occurs on LTH transition
+  for (int i=0; i<4; i++) {
+    //pinMode(enc_button_pins[i], INPUT_PULLUP);
+    debounce[i]->attach(enc_button_pins[i], INPUT_PULLUP);
+    debounce[i]->interval(25); // 25ms ebounce time
+  }
   
   Serial.begin(115200);
   Serial.println(SDA);
@@ -149,6 +154,22 @@ void setup() {
 void loop() {  
   long tempEnc;
   short relAngle;
+
+  // use duration() method later for mode changes
+  //Serial.println("updating buttons");
+  for (int i=0; i < 4; i++) {
+    debounce[i]->update();
+    if (debounce[i]->fell()) {
+      // Serial.println("got button press");
+      if (savedAngle[i] == 0) { // we don't have a saved angle
+        savedAngle[i] = angle[i];
+        angle[i] = 0;
+      } else {  // we do have a saved angle, let's restore it
+        angle[i] = savedAngle[i];
+        savedAngle[i] = 0;
+      }
+    }
+  }
 
   for (int i = 0; i < 4; i++) {  //update angles
     tempEnc = angle[i] + read_rotary(i) * angleScale;
@@ -187,17 +208,17 @@ void loop() {
   for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles
     intermediate = inputValue * cos2Table[abs(90 - abs(abs(angle[i]) - 90))]; // abs(90 - abs( x - 90 )) reflects 0 - 180 to 0-90,90-0
     // ultimately this will actually just be A/B/C/D no value + 4
-    value[i+4] = (short)(intermediate / oneLens);                          // and 0 - (-180) to the same
+    value[i+4] = (short)(intermediate / 1000);                          // and 0 - (-180) to the same
     selectSide(addr[i+4][0]);
     sendValue(addr[i+4][1], addr[i+4][2], value[i+4]);
     
     intermediate = value[i+4] * cos2Table[abs(90 - abs(abs(relativeAngle[i]) - 90))];
-    value[i+8] = (short)(intermediate / oneLens);
+    value[i+8] = (short)(intermediate / 1000);
     selectSide(addr[i+8][0]);
     sendValue(addr[i+8][1], addr[i+8][2], value[i+8]);
 
     intermediate = value[i+4] * cos2Table[abs(90 - abs(abs(relativeAngle[mod(i-1,4)]) - 90))];
-    value[mod(i-1,4)+8] = (short)(intermediate / oneLens);
+    value[mod(i-1,4)+8] = (short)(intermediate / 1000);
     selectSide(addr[mod(i-1,4)+8][0]);
     sendValue(addr[mod(i-1,4)+8][1], addr[mod(i-1,4)+8][2], value[mod(i-1,4)+8]);
 //    Serial.print("value ");
