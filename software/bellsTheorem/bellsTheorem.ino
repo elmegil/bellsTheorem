@@ -1,7 +1,6 @@
 
 
 #include <Wire.h>
-#include <Encoder.h>
 
 #define DEBUG 1
 
@@ -55,6 +54,7 @@ short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
                     maximumOutput, maximumOutput, maximumOutput, maximumOutput,
                     maximumOutput };
 
+const short angleScale = 2; // scale the encoder magnitude, otherwise you spend forever to go 180 degrees
 long angle[4] = { 0, 0, 0, 0 };  // absolute angle of each encoder
 long relativeAngle[4] = { 0, 0, 0, 0 }; // relative angle of each pair A->B, B->C, C->D, D-A[]
 
@@ -111,19 +111,16 @@ unsigned short cos2Table[] = {
 byte xpstatus;
 byte error;
 
-Encoder encA(ENCAB, ENCAA);
-Encoder encB(ENCBB, ENCBA);
-Encoder encC(ENCCB, ENCCA);
-Encoder encD(ENCDB, ENCDA);
-
-Encoder *encoders[] = { &encA, &encB, &encC, &encD };
+// Global variables for the encoders that are saved between calls:
+const uint8_t encPins[8] = {ENCAA, ENCAB, ENCBA, ENCBB, ENCCA, ENCCB, ENCDA, ENCDB};//encoder pins defined above
+static uint8_t enc_PrevNextCode[4] = {0, 0, 0, 0};//used by enc driver
+static uint16_t enc_Store[4] = {0, 0, 0, 0};//used by enc driver
+const bool ENC_DIRECTION = 0;//this can be changed in options for wrong way encoders
 
 //
 // intermediate = inputValue * cos2Table[0] * cos2Table[0] * cos2Table[0]
 //
 // final = (short)(intermediate / threeLens)
-
-
 
 void setup() {  
   pinMode(LATCH, OUTPUT);
@@ -153,82 +150,58 @@ void loop() {
   long tempEnc;
   short relAngle;
 
-  for (int i = 0; i < 4; i++) {
-    tempEnc = encoders[i]->read();
-    if (tempEnc != angle[i]) { // change!
-      Serial.println("=========================================");
-      Serial.print("change! ");
-      Serial.println(i);
-      angle[i] = tempEnc;
-      if (angle[i] > 180) {
-        angle[i] -= 180;
-        encoders[i]->write(angle[i]);
-      } else if (angle[i] < -180) {
-        angle[i] += 180;
-        encoders[i]->write(angle[i]);
-      }
-      Serial.print("angle ");
-//      Serial.print(i);
-//      Serial.print(" is ");
-//      Serial.println(angle[i]);
-      for (int x=0; x<4; x++) { Serial.print(angle[x]); Serial.print(" "); } Serial.println();
-      
-      // ok angle is set, now check the relationship to adjacent lenses
-      relAngle = angle[mod(i+1,4)] - angle[i]; // maximum difference is 360
-      if (relAngle > 180) {
-        relAngle -= 180;
-      } else if (relAngle < -180) {
-        relAngle += 180;
-      }
-      relativeAngle[i] = relAngle;
-//      Serial.print("forward relative angle ");
-//      Serial.print(i);
-//      Serial.print(" is ");
-//      Serial.println(relAngle);
-      relAngle = angle[i] - angle[mod(i-1,4)];
-      if (relAngle > 180) {
-        relAngle -= 180;
-      } else if (relAngle < -180) {
-        relAngle += 180;
-      }
-      relativeAngle[mod(i-1,4)] = relAngle;
-//      Serial.print("backward relative angle ");
-//      Serial.print(mod(i-1,4));
-//      Serial.print(" is ");
-//      Serial.println(relAngle);
-      Serial.print("relativeAngle ");
-      for (int x=0; x<4; x++) { Serial.print(relativeAngle[x]); Serial.print(" "); } Serial.println();
-
-      intermediate = inputValue * cos2Table[abs(90 - abs(abs(angle[i]) - 90))]; // abs(90 - abs( x - 90 )) reflects 0 - 180 to 0-90,90-0
-      // ultimately this will actually just be A/B/C/D no value + 4
-      value[i+4] = (short)(intermediate / oneLens);                          // and 0 - (-180) to the same
-      selectSide(addr[i+4][0]);
-      sendValue(addr[i+4][1], addr[i+4][2], value[i+4]);
-//      Serial.print("single lens value ");
-//      Serial.print(i);
-//      Serial.print(" is ");
-//      Serial.println(value[i+4]);
-      
-      intermediate = value[i+4] * cos2Table[abs(90 - abs(abs(relativeAngle[i]) - 90))];
-      value[i+8] = (short)(intermediate / oneLens);
-      selectSide(addr[i+8][0]);
-      sendValue(addr[i+8][1], addr[i+8][2], value[i+8]);
-//      Serial.print("forward double lens value ");
-//      Serial.print(i);
-//      Serial.print(" is ");
-//      Serial.println(value[i+8]);
-
-      intermediate = value[i+4] * cos2Table[abs(90 - abs(abs(relativeAngle[mod(i-1,4)]) - 90))];
-      value[mod(i-1,4)+8] = (short)(intermediate / oneLens);
-      selectSide(addr[mod(i-1,4)+8][0]);
-      sendValue(addr[mod(i-1,4)+8][1], addr[mod(i-1,4)+8][2], value[mod(i-1,4)+8]);
-//      Serial.print("backward double lens value ");
-//      Serial.print(mod(i-1,4)+8);
-//      Serial.print(" is ");
-//      Serial.println(value[mod(i-1,4)+8]);
-      Serial.print("value ");
-      for (int x=0; x<13; x++) { Serial.print(value[x]); Serial.print(" "); } Serial.println();
+  for (int i = 0; i < 4; i++) {  //update angles
+    tempEnc = angle[i] + read_rotary(i) * angleScale;
+    if (tempEnc > 180) {
+      tempEnc -= 180;
+    } else if (tempEnc < -180) {
+      tempEnc += 180;
     }
+    angle[i] = tempEnc;
+  }
+
+//  Serial.print("angle ");
+//  for (int x=0; x<4; x++) { Serial.print(angle[x]); Serial.print(" "); } Serial.println();
+    
+    // ok angle is set, now check the relationship to adjacent lenses
+  for (int i = 0; i < 4; i++) { 
+    relAngle = angle[mod(i+1,4)] - angle[i]; // maximum difference is 360
+    if (relAngle > 180) {
+      relAngle -= 180;
+    } else if (relAngle < -180) {
+      relAngle += 180;
+    }
+    relativeAngle[i] = relAngle;
+    relAngle = angle[i] - angle[mod(i-1,4)];
+    if (relAngle > 180) {
+      relAngle -= 180;
+    } else if (relAngle < -180) {
+      relAngle += 180;
+    }
+    relativeAngle[mod(i-1,4)] = relAngle;
+  }
+  
+//  Serial.print("relativeAngle ");
+//  for (int x=0; x<4; x++) { Serial.print(relativeAngle[x]); Serial.print(" "); } Serial.println();
+
+  for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles
+    intermediate = inputValue * cos2Table[abs(90 - abs(abs(angle[i]) - 90))]; // abs(90 - abs( x - 90 )) reflects 0 - 180 to 0-90,90-0
+    // ultimately this will actually just be A/B/C/D no value + 4
+    value[i+4] = (short)(intermediate / oneLens);                          // and 0 - (-180) to the same
+    selectSide(addr[i+4][0]);
+    sendValue(addr[i+4][1], addr[i+4][2], value[i+4]);
+    
+    intermediate = value[i+4] * cos2Table[abs(90 - abs(abs(relativeAngle[i]) - 90))];
+    value[i+8] = (short)(intermediate / oneLens);
+    selectSide(addr[i+8][0]);
+    sendValue(addr[i+8][1], addr[i+8][2], value[i+8]);
+
+    intermediate = value[i+4] * cos2Table[abs(90 - abs(abs(relativeAngle[mod(i-1,4)]) - 90))];
+    value[mod(i-1,4)+8] = (short)(intermediate / oneLens);
+    selectSide(addr[mod(i-1,4)+8][0]);
+    sendValue(addr[mod(i-1,4)+8][1], addr[mod(i-1,4)+8][2], value[mod(i-1,4)+8]);
+//    Serial.print("value ");
+//    for (int x=0; x<13; x++) { Serial.print(value[x]); Serial.print(" "); } Serial.println();
   }
 }
 
@@ -281,6 +254,37 @@ int mod( int x, int y ){
    return x<0 ? ((x+1)%y)+y-1 : x%y;
 }
 
+// Jim Matheson's encoder driver
+// A vald CW or  CCW move returns 1 or -1 , invalid returns 0.
+// adapted from original code by John Main - best-microcontroller-projects.com
+//
+//when you call this you get 1,0,or -1 depending on how the encoder was moved.
+
+int8_t read_rotary(uint8_t num) {
+  static int8_t rot_enc_table[] = {0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0};
+
+  enc_PrevNextCode[num] <<= 2;
+  if (!ENC_DIRECTION){//forward
+    if (digitalReadFast(encPins[num<<1])) enc_PrevNextCode[num] |= 0x02;
+    if (digitalReadFast(encPins[(num<<1)+1])) enc_PrevNextCode[num] |= 0x01;
+  } else {//reverse
+    if (digitalReadFast(encPins[num<<1])) enc_PrevNextCode[num] |= 0x02;
+    if (digitalReadFast(encPins[(num<<1)+1])) enc_PrevNextCode[num] |= 0x01;
+  }
+  enc_PrevNextCode[num] &= 0x0f;
+
+   // If valid then store as 16 bit data.
+   if  (rot_enc_table[enc_PrevNextCode[num]] ) {
+      enc_Store[num] <<= 4;
+      enc_Store[num] |= enc_PrevNextCode[num];
+      //if (store==0xd42b) return 1;
+      //if (store==0xe817) return -1;
+      if ((enc_Store[num]&0xff)==0x2b) return -1;
+      if ((enc_Store[num]&0xff)==0x17) return 1;
+   }
+   return 0;
+}
+
 
 // old cruft I might reference again someday
 
@@ -297,3 +301,6 @@ int mod( int x, int y ){
 //    }
 //  }
   //while (1) { };
+
+
+  
