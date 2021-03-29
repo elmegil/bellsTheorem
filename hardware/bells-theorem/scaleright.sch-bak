@@ -3,7 +3,7 @@ EELAYER 30 0
 EELAYER END
 $Descr A4 11693 8268
 encoding utf-8
-Sheet 7 8
+Sheet 8 8
 Title ""
 Date ""
 Rev ""
@@ -68,27 +68,27 @@ $EndComp
 $Comp
 L device:R_Small_US R?
 U 1 1 5F8A66B2
-P 3450 2350
+P 3450 2100
 AR Path="/5CEF66AD/5F9DE87B/5F8A66B2" Ref="R?"  Part="1" 
 AR Path="/5CEF66AD/5F8906B5/5F8A66B2" Ref="R106"  Part="1" 
-F 0 "R106" V 3245 2350 50  0000 C CNN
-F 1 "30K" V 3336 2350 50  0000 C CNN
-F 2 "Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder" H 3450 2350 50  0001 C CNN
-F 3 "~" H 3450 2350 50  0001 C CNN
-	1    3450 2350
+F 0 "R106" V 3245 2100 50  0000 C CNN
+F 1 "30K" V 3336 2100 50  0000 C CNN
+F 2 "Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder" H 3450 2100 50  0001 C CNN
+F 3 "~" H 3450 2100 50  0001 C CNN
+	1    3450 2100
 	0    1    1    0   
 $EndComp
 $Comp
 L device:R_Small_US R?
 U 1 1 5F8A66B8
-P 3450 2450
+P 3450 2600
 AR Path="/5CEF66AD/5F9DE87B/5F8A66B8" Ref="R?"  Part="1" 
 AR Path="/5CEF66AD/5F8906B5/5F8A66B8" Ref="R107"  Part="1" 
-F 0 "R107" V 3650 2450 50  0000 C CNN
-F 1 "30K" V 3550 2450 50  0000 C CNN
-F 2 "Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder" H 3450 2450 50  0001 C CNN
-F 3 "~" H 3450 2450 50  0001 C CNN
-	1    3450 2450
+F 0 "R107" V 3650 2600 50  0000 C CNN
+F 1 "30K" V 3550 2600 50  0000 C CNN
+F 2 "Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder" H 3450 2600 50  0001 C CNN
+F 3 "~" H 3450 2600 50  0001 C CNN
+	1    3450 2600
 	0    1    1    0   
 $EndComp
 $Comp
@@ -230,9 +230,7 @@ F 3 "~" H 5150 2750 50  0001 C CNN
 	0    1    1    0   
 $EndComp
 Wire Wire Line
-	3550 2350 3700 2350
-Wire Wire Line
-	3700 2350 3700 2100
+	3550 2100 3700 2100
 Wire Wire Line
 	3700 2100 3800 2100
 Wire Wire Line
@@ -259,9 +257,7 @@ Connection ~ 4800 2200
 Wire Wire Line
 	4800 2200 4850 2200
 Wire Wire Line
-	3550 2450 3700 2450
-Wire Wire Line
-	3700 2450 3700 2600
+	3550 2600 3700 2600
 Wire Wire Line
 	3700 2850 3800 2850
 Wire Wire Line
@@ -410,12 +406,12 @@ Wire Wire Line
 Wire Wire Line
 	6700 3050 6950 3050
 Wire Wire Line
-	3350 2350 3100 2350
+	3350 2100 3100 2100
 Wire Wire Line
-	3350 2450 3100 2450
-Text HLabel 3100 2350 0    50   Input ~ 0
+	3350 2600 3100 2600
+Text HLabel 3100 2100 0    50   Input ~ 0
 CVC_in
-Text HLabel 3100 2450 0    50   Input ~ 0
+Text HLabel 3100 2600 0    50   Input ~ 0
 CVD_in
 $Comp
 L OpAmps:TL074 U?

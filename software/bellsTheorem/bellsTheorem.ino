@@ -3,79 +3,53 @@
 #include <Wire.h>
 #include <Bounce2.h>
 //#include <ADC.h> // super complex and not very well documented afaict
+#include <EEPROM.h> // for saving state
+
+/*
+ * EEPROM notes
+ * 
+ * EEPROM.Put(address, object)
+ * EEPROM.Get(address, object)
+ * 
+ * use sizeof(object) to increment the address
+ * no specific address map, just an array of bytes
+ */
 
 #define DEBUG 1
 
-// addresses for the I2C expander
-// WIRE APPENDS THE READ/WRITE BIT!!
-#define XPADDR 0x70
-// control bytes for the I2C expander
-// channel 0 is left side, 3 DACs, 0x61, 62, 63
-// channel 1 is right side, 4 DACs, 0x60, 61, 62, 63
-#define XPCHAN0 0x04 
-#define XPCHAN1 0x05
-#define XPCHAN_NONE 0x00
 
-/*
- * DAC -> output mapping
- * 
- *  left side 0x61   dual channel   A / D
- *  left side 0x62   dual channel   B / C
- *  left side 0x63   dual channel   DAB / DA
- *  right side 0x60  single channel ABCD
- *  right side 0x61  dual channel   BCD / CD
- *  right side 0x62  dual channel   BC / CDA
- *  right side 0x63  dual channel   AB / ABC
- */
 
-// address triplets in order, A/B/C/D, AB/BC/CD/DA, ABC/BCD/CDA/DAB, ABCD
-// 0 = left, 1 = right, DAC address, unit address within the DAC (Vout0 or Vout1)
-byte addr[13][3] = { { 0, 0x61, 0x00}, 
-                      { 0, 0x62, 0x00},
-                      { 0, 0x62, 0x01},
-                      { 0, 0x61, 0x01},
-                      { 1, 0x63, 0x00},
-                      { 1, 0x62, 0x00},
-                      { 1, 0x61, 0x01},
-                      { 0, 0x63, 0x01},
-                      { 1, 0x63, 0x01},
-                      { 1, 0x61, 0x00},
-                      { 1, 0x62, 0x01},
-                      { 0, 0x63, 0x00},
-                      { 1, 0x60, 0x00} };
-
-const unsigned short maximumOutput = 0x3FF; //1023
-// we start at 0 degrees, so everything is maxed out (until such time as we start taking input)
-short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
-                    maximumOutput, maximumOutput, maximumOutput, maximumOutput,
-                    maximumOutput, maximumOutput, maximumOutput, maximumOutput,
-                    maximumOutput };
-
-// other pins used
-// latch the DACs
-#define LATCH 0
-
-#define ENCAA 23
-#define ENCAB 22
-#define SWA 21
-#define ENCBA 2
-#define ENCBB 3
-#define SWB 1
-#define ENCCA 4
-#define ENCCB 5
-#define SWC 6
+//  pins used
+#define ENCAA 17
+#define ENCAB 18
+#define SWA 19
+#define ENCBA 1
+#define ENCBB 0
+#define SWB 2
+#define ENCCA 5
+#define ENCCB 4
+#define SWC 3
 #define ENCDA 15
-#define ENCDB 14
-#define SWD 16
+#define ENCDB 16
+#define SWD 14
 #define CVA A15
 #define CVB A16
-#define CVC A10
-#define CVD A11
-#define CV_IN 38
-
-#define LEFTSIDE 0
-#define RIGHTSIDE 1
-
+#define CVC A12
+#define CVD A13
+#define CV_IN A14
+#define A 23
+#define B 6
+#define C 28
+#define D 29
+#define AB 7
+#define BC 9
+#define CD 33
+#define DA 37
+#define ABC 8
+#define BCD 25
+#define CDA 36
+#define DAB 22
+#define ABCD 24
 
 // stuff for bell's Theorem testing
 // fixed point, 3 digit representation of cosine squared, for integer angles 0 - 90
@@ -90,9 +64,6 @@ unsigned short cos2Table[] = { // 3E8 == 1000 decimal
   0x75,0x6A,0x5F,0x55,0x4C,0x43,0x3B,0x33,0x2B,0x24,
   0x1E,0x18,0x13,0xF,0xB,0x8,0x5,0x3,0x1,0x0,0x0
 };
-
-byte xpstatus;
-byte error;
 
 // Global variables for the encoders that are saved between calls:
 const uint8_t encPins[8] = {ENCAA, ENCAB, ENCBA, ENCBB, ENCCA, ENCCB, ENCDA, ENCDB};//encoder pins defined above
@@ -112,75 +83,78 @@ Bounce *debounce[4] = {&debA, &debB, &debC, &debD} ;
 byte cv_in_pins[4] = { CVA, CVB, CVC, CVD };
 long cv_values[4] = { 0, 0, 0, 0 };
 
-long long intermediate;
+const unsigned short maximumOutput = 0x3FF; //1023
+// we start at 0 degrees, so everything is maxed out (until such time as we start taking input)
+short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
+                    maximumOutput, maximumOutput, maximumOutput, maximumOutput,
+                    maximumOutput, maximumOutput, maximumOutput, maximumOutput,
+                    maximumOutput };
+// positions correspond to the value table
+byte pinTable[13] = {
+  A, B, C, D, AB, BC, CD, DA, ABC, BCD, CDA, DAB, ABCD
+};
+
 unsigned short inputValue = maximumOutput;                    
 
 const short angleScale = 2; // scale the encoder magnitude, otherwise you spend forever to go 180 degrees
 long angle[4] = { 0, 0, 0, 0 };  // absolute angle of each encoder
 long savedAngle[4] = { 0, 0, 0, 0 }; // "undo" of unintentional clicks
-long relativeAngle[4] = { 0, 0, 0, 0 }; // relative angle of each pair A->B, B->C, C->D, D-A[]
-
+long relativeAngle[4] = { 0, 0, 0, 0 }; // relative angle of each pair A->B, B->C, C->D, D->A
 long angle_sum[4] = { 0, 0, 0, 0 }; // hold angle + cv
 
-// try some tricks to force inlining of simple functions  -- but doesn't seem to make much difference?
-//inline int mod( int x, int y ) __attribute__((always_inline));
-//inline long constrainAngle(long angle) __attribute__((always_inline));
-//inline short constrainCos2(short angle) __attribute__((always_inline));
-
-//
-// intermediate = inputValue * cos2Table[0] * cos2Table[0] * cos2Table[0]
-//
-// final = (short)(intermediate / threeLens)
-
 void setup() {  
-  pinMode(LATCH, OUTPUT);
-  digitalWrite(LATCH, HIGH); // latch occurs on LTH transition
   for (int i=0; i<4; i++) {
-    //pinMode(enc_button_pins[i], INPUT_PULLUP);
-    debounce[i]->attach(enc_button_pins[i], INPUT_PULLUP);
+    debounce[i]->attach(enc_button_pins[i], INPUT);
     debounce[i]->interval(25); // 25ms ebounce time
   }
+  
+  for (int i=0; i<13; i++) {
+    // pinMode(pinTable[i], OUTPUT); // not necessary and actually "OUTPUT" is a digital output
+    analogWriteFrequency(pinTable[i], 146484);
+  }
+  analogWriteResolution(10);
 
   for (int i=0; i<4; i++) {
     pinMode(cv_in_pins[i], INPUT);
   }
+  pinMode(CV_IN, INPUT);
   analogReadRes(10); // 10 bit resolution
   analogReadAveraging(3); // just pick a number to try and reduce jitter
   
   Serial.begin(115200);
   Serial.println("Bell's Theorem startup");
-  Serial.println(SDA);
-  Serial.println(SCL);
-
-  Wire.begin();
-  Wire.setClock(400000); // try to use Fast mode.... works, but doesn't seem to make the test loop any faster
-  Wire.requestFrom(XPADDR,1);
-  while (Wire.available()) {
-    xpstatus = Wire.read();
-  }  
-  //Serial.println(xpstatus); // should be all zeroes at this point
-  for (int i = 0; i<13; i++) {  // max everyone out to start because all angles are 0
-    selectSide(addr[i][0]);
-    sendValue(addr[i][1], addr[i][2], maximumOutput);
-  }
-
-  selectSide(LEFTSIDE);     // set as default state
+  Serial.print(F("F_CPU = "));
+  Serial.print(F_CPU,DEC);
+  Serial.println();
 }
 
 // for checking loop times
 long lastMicros = 0;
 long curMicros = 0;
 
+// more test bits
+int testvalue = 0;
+
 void loop() {  
-  curMicros = micros();
-  Serial.print("loop time: "); Serial.print(curMicros - lastMicros); Serial.println();
-  lastMicros=curMicros;
+  //curMicros = micros();
+  //Serial.print("loop time: "); Serial.print(curMicros - lastMicros); Serial.println();
+  // Serial.print("test value: "); Serial.print(testvalue); Serial.println();
+  //lastMicros=curMicros;
+  for (short i=0; i<13; i++) {
+    analogWrite(pinTable[i], testvalue);
+  }
+//  testvalue+=1;
+//  if (testvalue > 100) {
+//    testvalue = 0;
+//  }
+//  delay(100); // ms
   // use duration() method later for mode changes
   //Serial.println("updating buttons");
+  // consider long press saving to EEPROM or restoring from EEPROM
   for (int i=0; i < 4; i++) {
     debounce[i]->update();
     if (debounce[i]->fell()) {
-      // Serial.println("got button press");
+      Serial.print("got button press "); Serial.print(i); Serial.println();
       if (savedAngle[i] == 0) { // we don't have a saved angle
         savedAngle[i] = angle[i];
         angle[i] = 0;
@@ -189,86 +163,45 @@ void loop() {
         savedAngle[i] = 0;
       }
     }
-
+    
+    long prevAngle = angle[i];
     angle[i] = constrainAngle(angle[i] + read_rotary(i) * angleScale);
-
-    cv_values[i] = (long)(analogRead(cv_in_pins[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
+    //cv_values[i] = (long)(analogRead(cv_in_pins[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
+    cv_values[i] = 0;  // THERE IS SIGNIFICNANT JITTER IN THE ANALOG READ HERE
     angle_sum[i] = constrainAngle(cv_values[i] + angle[i]);
+    if (prevAngle != angle[i]) {
+      Serial.print("angle "); Serial.print(i); Serial.print(" : "); Serial.print(angle[i]); Serial.println();
+    }
   }
    
   // ok angle is set, now check the relationship to adjacent lenses
   for (int i = 0; i < 4; i++) {  
+    long prevRelAngle = relativeAngle[i];
     relativeAngle[i] = constrainAngle(angle_sum[mod(i+1,4)] - angle_sum[i]); // maximum difference is 360
-  }
-
-  inputValue = analogRead(CV_IN); 
-  
-  for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles + the CV inputs
-    // intermediate = inputValue * cos2Table[constrainCos2(angle_sum[i])]; 
-    value[i] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[i])]) / 1000);                          
-    selectSide(addr[i][0]);
-    sendValue(addr[i][1], addr[i][2], value[i]);
-    
-    //intermediate = value[i] * cos2Table[constrainCos2(relativeAngle[i])];
-    value[i+4] = (short)((value[i] * cos2Table[constrainCos2(relativeAngle[i])]) / 1000);
-    selectSide(addr[i+4][0]);
-    sendValue(addr[i+4][1], addr[i+4][2], value[i+4]);
-
-    //intermediate = value[i+4] * cos2Table[constrainCos2(relativeAngle[mod(i+1,4)])];
-    value[i+8] = (short)((value[i+4] * cos2Table[constrainCos2(relativeAngle[mod(i+1,4)])]) / 1000);
-    selectSide(addr[i+8][0]);
-    sendValue(addr[i+8][1], addr[i+8][2], value[i+8]);
-  }
-  // still gotta do ABCD
-  // intermediate = value[8] * cos2Table[constrainCos2(relativeAngle[2])];
-  value[12] = (short)((value[8] * cos2Table[constrainCos2(relativeAngle[2])])/1000);
-  selectSide(addr[12][0]);
-  sendValue(addr[12][1], addr[12][2], value[12]);
-}
-
-void selectSide(byte side) {
-  Wire.beginTransmission(XPADDR);
-  if (side == 0) {  
-    Wire.write(XPCHAN0); // enable channel 0, in our case the left side DACs
-  } else {
-    Wire.write(XPCHAN1); // enable channel 1, in our case the right side DACs
-  }
-  error = Wire.endTransmission();
-  if (error != 0) {
-    Serial.print("endTransmission returned ");
-    Serial.println(error);
-  }
-}
-
-void sendValue(byte dac, byte unit, short value) {
-  int check = 0;
-  Wire.beginTransmission(dac);
-  Wire.write((unit & 0x1F)<<3); // unit!  forgot this
-  check = Wire.write((value & 0xFF00)>>8); // byte 1
-  if (check != 1) {
-    Serial.print("failed to write first byte to DAC ");
-    Serial.print(dac);
-    Serial.print(" unit ");
-    Serial.println(unit);
-  } else {
-    check = Wire.write(value & 0x00FF); // byte 2
-    if (check != 1) {
-      Serial.print("failed to write second byte to DAC ");
-      Serial.print(dac);
-      Serial.print(" unit ");
-      Serial.println(unit);
+    if (prevRelAngle != relativeAngle[i]) {
+      Serial.print("relative angle "); Serial.print(i); Serial.print(" : "); Serial.print(relativeAngle[i]); Serial.println();
     }
   }
-  error = Wire.endTransmission();
-  if (error != 0) {
-    Serial.print("endTransmission returned ");
-    Serial.println(error);
+
+  //inputValue = analogRead(CV_IN); 
+  inputValue = 1023; // for now we're going to see how well the various bits work
+  
+  for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles + the CV inputs
+    value[i] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[i])]) / 1000);                          
+    analogWrite(pinTable[i], value[i]);
+    value[i+4] = (short)((value[i] * cos2Table[constrainCos2(relativeAngle[i])]) / 1000);
+    analogWrite(pinTable[i+4], value[i+4]);
+    value[i+8] = (short)((value[i+4] * cos2Table[constrainCos2(relativeAngle[mod(i+1,4)])]) / 1000);
+    analogWrite(pinTable[i+8], value[i+8]);
+    if (i == 0) {
+      Serial.print(value[i]); Serial.print(" "); Serial.print(value[i+4]); Serial.print (" "); Serial.println(value[i+8]);
+    }
   }
-  delayMicroseconds(1);
-  digitalWriteFast(LATCH, LOW);
-  delayMicroseconds(1);
-  digitalWriteFast(LATCH, HIGH);
+  // still gotta do ABCD
+  value[12] = (short)((value[8] * cos2Table[constrainCos2(relativeAngle[2])])/1000);
+  analogWrite(pinTable[12], value[12]);
 }
+
 
 // abs(90 - abs( x - 90 )) reflects 0 - 180 to 0-90,90-0 and 0 - (-180) to the same
 short constrainCos2(short angle) {
@@ -319,23 +252,4 @@ int8_t read_rotary(uint8_t num) {
    }
    return 0;
 }
-
-
-// old cruft I might reference again someday
-
-  //delay(1000);
-//  for (int i = 4; i<12; i++) {  // cycle over all LEDs )when < 13
-//    selectSide(addr[i][0]);
-//    for (value = 1; value < 1024; value ++) {  
-//      sendValue(addr[i][1], addr[i][2], (value-1));
-//      sendValue(addr[12][1], addr[12][2], (value-1));
-//    }
-//    for ( ; value > 0; value--) {   // go back down
-//      sendValue(addr[i][1], addr[i][2], (value-1));
-//      sendValue(addr[12][1], addr[12][2], (value-1));
-//    }
-//  }
-  //while (1) { };
-
-
   

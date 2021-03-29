@@ -101,24 +101,12 @@ F 3 "" H 4750 2900 50  0000 C CNN
 	1    4750 2900
 	1    0    0    -1  
 $EndComp
-$Comp
-L power:PWR_FLAG #FLG03
-U 1 1 5B65E029
-P 4750 3250
-F 0 "#FLG03" H 4750 3345 50  0001 C CNN
-F 1 "PWR_FLAG" H 4750 3430 50  0000 C CNN
-F 2 "" H 4750 3250 50  0000 C CNN
-F 3 "" H 4750 3250 50  0000 C CNN
-	1    4750 3250
-	1    0    0    -1  
-$EndComp
 Wire Wire Line
 	4450 2900 4450 2950
 Connection ~ 4450 2900
 Connection ~ 4450 3250
 Wire Wire Line
 	4450 3250 4750 3250
-Connection ~ 4750 3250
 Wire Wire Line
 	4450 3550 4450 3600
 Connection ~ 4450 3600
@@ -168,7 +156,7 @@ Wire Wire Line
 Wire Wire Line
 	4250 2900 4450 2900
 Wire Wire Line
-	3650 3250 4450 3250
+	3650 3250 4000 3250
 Connection ~ 3650 3250
 $Comp
 L device:D_Schottky D1
@@ -234,17 +222,6 @@ F 2 "Connector_IDC:IDC-Header_2x05_P2.54mm_Vertical" H 3300 3250 50  0001 C CNN
 F 3 "~" H 3300 3250 50  0001 C CNN
 	1    3300 3250
 	-1   0    0    1   
-$EndComp
-$Comp
-L regulator_linear:L7805 U2
-U 1 1 5F8CF7D5
-P 3500 4450
-F 0 "U2" H 3500 4692 50  0000 C CNN
-F 1 "L7805" H 3500 4601 50  0000 C CNN
-F 2 "Package_TO_SOT_THT:TO-92_Inline_Wide" H 3525 4300 50  0001 L CIN
-F 3 "http://www.st.com/content/ccc/resource/technical/document/datasheet/41/4f/b3/b0/12/d4/47/88/CD00000444.pdf/files/CD00000444.pdf/jcr:content/translations/en.CD00000444.pdf" H 3500 4400 50  0001 C CNN
-	1    3500 4450
-	1    0    0    -1  
 $EndComp
 $Comp
 L device:C_Small C1
@@ -422,4 +399,29 @@ F 3 "" H 5200 4450 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Connection ~ 5200 4450
+$Comp
+L power:PWR_FLAG #FLG0101
+U 1 1 607C458A
+P 4000 3250
+F 0 "#FLG0101" H 4000 3325 50  0001 C CNN
+F 1 "PWR_FLAG" H 4000 3423 50  0000 C CNN
+F 2 "" H 4000 3250 50  0001 C CNN
+F 3 "~" H 4000 3250 50  0001 C CNN
+	1    4000 3250
+	1    0    0    -1  
+$EndComp
+Connection ~ 4000 3250
+Wire Wire Line
+	4000 3250 4450 3250
+$Comp
+L regulator_linear:L78L05_TO92 U2
+U 1 1 60614A90
+P 3500 4450
+F 0 "U2" H 3500 4692 50  0000 C CNN
+F 1 "L78L05_TO92" H 3500 4601 50  0000 C CNN
+F 2 "Package_TO_SOT_THT:TO-92_Inline_Wide" H 3500 4675 50  0001 C CIN
+F 3 "http://www.st.com/content/ccc/resource/technical/document/datasheet/15/55/e5/aa/23/5b/43/fd/CD00000446.pdf/files/CD00000446.pdf/jcr:content/translations/en.CD00000446.pdf" H 3500 4400 50  0001 C CNN
+	1    3500 4450
+	1    0    0    -1  
+$EndComp
 $EndSCHEMATC

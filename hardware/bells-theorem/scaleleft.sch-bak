@@ -3,7 +3,7 @@ EELAYER 30 0
 EELAYER END
 $Descr A4 11693 8268
 encoding utf-8
-Sheet 8 8
+Sheet 7 8
 Title ""
 Date ""
 Rev ""
@@ -68,27 +68,27 @@ $EndComp
 $Comp
 L device:R_Small_US R?
 U 1 1 5F89D22B
-P 2750 1900
+P 2750 1650
 AR Path="/5CEF66AD/5F9DE87B/5F89D22B" Ref="R?"  Part="1" 
 AR Path="/5CEF66AD/5F8909DB/5F89D22B" Ref="R116"  Part="1" 
-F 0 "R116" V 2545 1900 50  0000 C CNN
-F 1 "30K" V 2636 1900 50  0000 C CNN
-F 2 "Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder" H 2750 1900 50  0001 C CNN
-F 3 "~" H 2750 1900 50  0001 C CNN
-	1    2750 1900
+F 0 "R116" V 2545 1650 50  0000 C CNN
+F 1 "30K" V 2636 1650 50  0000 C CNN
+F 2 "Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder" H 2750 1650 50  0001 C CNN
+F 3 "~" H 2750 1650 50  0001 C CNN
+	1    2750 1650
 	0    1    1    0   
 $EndComp
 $Comp
 L device:R_Small_US R?
 U 1 1 5F89D231
-P 2750 2000
+P 2750 2150
 AR Path="/5CEF66AD/5F9DE87B/5F89D231" Ref="R?"  Part="1" 
 AR Path="/5CEF66AD/5F8909DB/5F89D231" Ref="R117"  Part="1" 
-F 0 "R117" V 2950 2000 50  0000 C CNN
-F 1 "30K" V 2850 2000 50  0000 C CNN
-F 2 "Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder" H 2750 2000 50  0001 C CNN
-F 3 "~" H 2750 2000 50  0001 C CNN
-	1    2750 2000
+F 0 "R117" V 2950 2150 50  0000 C CNN
+F 1 "30K" V 2850 2150 50  0000 C CNN
+F 2 "Resistor_SMD:R_0805_2012Metric_Pad1.15x1.40mm_HandSolder" H 2750 2150 50  0001 C CNN
+F 3 "~" H 2750 2150 50  0001 C CNN
+	1    2750 2150
 	0    1    1    0   
 $EndComp
 $Comp
@@ -230,9 +230,7 @@ F 3 "~" H 4450 2300 50  0001 C CNN
 	0    1    1    0   
 $EndComp
 Wire Wire Line
-	2850 1900 3000 1900
-Wire Wire Line
-	3000 1900 3000 1650
+	2850 1650 3000 1650
 Wire Wire Line
 	3000 1650 3100 1650
 Wire Wire Line
@@ -259,9 +257,7 @@ Connection ~ 4100 1750
 Wire Wire Line
 	4100 1750 4150 1750
 Wire Wire Line
-	2850 2000 3000 2000
-Wire Wire Line
-	3000 2000 3000 2150
+	2850 2150 3000 2150
 Wire Wire Line
 	3000 2400 3100 2400
 Wire Wire Line
@@ -376,9 +372,9 @@ Wire Wire Line
 	6000 2650 6000 2600
 Connection ~ 6000 2600
 Wire Wire Line
-	2650 1900 2400 1900
+	2650 1650 2400 1650
 Wire Wire Line
-	2650 2000 2400 2000
+	2650 2150 2400 2150
 $Comp
 L power:+3.3V #PWR0218
 U 1 1 5F8B6D62
@@ -589,9 +585,9 @@ F 3 "" H 5550 4400 50  0001 C CNN
 	1    5550 4400
 	1    0    0    -1  
 $EndComp
-Text HLabel 2400 2000 0    50   Input ~ 0
+Text HLabel 2400 2150 0    50   Input ~ 0
 CVA_in
-Text HLabel 2400 1900 0    50   Input ~ 0
+Text HLabel 2400 1650 0    50   Input ~ 0
 CVB_in
 Text HLabel 2400 3850 0    50   Input ~ 0
 IN_in
