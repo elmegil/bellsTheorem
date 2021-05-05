@@ -250,7 +250,6 @@ Wire Wire Line
 Wire Wire Line
 	4600 3000 4500 3000
 NoConn ~ 6800 2300
-NoConn ~ 6800 1600
 NoConn ~ 6800 1500
 NoConn ~ 6800 1200
 Wire Wire Line
@@ -353,28 +352,6 @@ Text HLabel 3750 6550 3    50   Output ~ 0
 ABCD
 Text HLabel 3850 6550 3    50   Output ~ 0
 BC
-$Comp
-L power:+3.3V #PWR0199
-U 1 1 5FA79550
-P 1300 4700
-F 0 "#PWR0199" H 1300 4550 50  0001 C CNN
-F 1 "+3.3V" H 1315 4873 50  0000 C CNN
-F 2 "" H 1300 4700 50  0001 C CNN
-F 3 "" H 1300 4700 50  0001 C CNN
-	1    1300 4700
-	1    0    0    -1  
-$EndComp
-$Comp
-L power:+3.3V #PWR0198
-U 1 1 5FA78B95
-P 10350 3600
-F 0 "#PWR0198" H 10350 3450 50  0001 C CNN
-F 1 "+3.3V" H 10365 3773 50  0000 C CNN
-F 2 "" H 10350 3600 50  0001 C CNN
-F 3 "" H 10350 3600 50  0001 C CNN
-	1    10350 3600
-	1    0    0    -1  
-$EndComp
 Wire Wire Line
 	10250 3550 10550 3550
 Wire Wire Line
@@ -409,8 +386,6 @@ Wire Wire Line
 	1250 6350 1800 6350
 Text HLabel 3550 6550 3    50   Output ~ 0
 C
-Wire Wire Line
-	10550 1850 10550 1950
 Wire Wire Line
 	1250 6250 1900 6250
 Wire Wire Line
@@ -523,19 +498,6 @@ Wire Wire Line
 Wire Wire Line
 	1300 4700 1300 4750
 $Comp
-L power:+12V #PWR?
-U 1 1 5F8674B5
-P 1600 6400
-AR Path="/5F7954A8/5F8674B5" Ref="#PWR?"  Part="1" 
-AR Path="/5CEF66AD/5F8674B5" Ref="#PWR056"  Part="1" 
-F 0 "#PWR056" H 1600 6250 50  0001 C CNN
-F 1 "+12V" H 1615 6573 50  0000 C CNN
-F 2 "" H 1600 6400 50  0001 C CNN
-F 3 "" H 1600 6400 50  0001 C CNN
-	1    1600 6400
-	-1   0    0    -1  
-$EndComp
-$Comp
 L power:GND #PWR?
 U 1 1 5F866538
 P 1500 4900
@@ -629,19 +591,6 @@ Text HLabel 9150 1400 1    50   Input ~ 0
 ENCD_B
 Text HLabel 9050 1400 1    50   Input ~ 0
 ENCD_A
-$Comp
-L power:+12V #PWR?
-U 1 1 5F97FD02
-P 10550 1850
-AR Path="/5F7954A8/5F97FD02" Ref="#PWR?"  Part="1" 
-AR Path="/5CEF66AD/5F97FD02" Ref="#PWR05"  Part="1" 
-F 0 "#PWR05" H 10550 1700 50  0001 C CNN
-F 1 "+12V" H 10565 2023 50  0000 C CNN
-F 2 "" H 10550 1850 50  0001 C CNN
-F 3 "" H 10550 1850 50  0001 C CNN
-	1    10550 1850
-	1    0    0    -1  
-$EndComp
 $Comp
 L power:GND #PWR?
 U 1 1 5F97FCF6
@@ -753,4 +702,47 @@ Wire Wire Line
 	4600 1300 2300 1300
 Wire Wire Line
 	2300 1300 2300 5150
+$Comp
+L power:+12V #PWR?
+U 1 1 5F97FD02
+P 10350 3600
+AR Path="/5F7954A8/5F97FD02" Ref="#PWR?"  Part="1" 
+AR Path="/5CEF66AD/5F97FD02" Ref="#PWR05"  Part="1" 
+F 0 "#PWR05" H 10350 3450 50  0001 C CNN
+F 1 "+12V" H 10365 3773 50  0000 C CNN
+F 2 "" H 10350 3600 50  0001 C CNN
+F 3 "" H 10350 3600 50  0001 C CNN
+	1    10350 3600
+	1    0    0    -1  
+$EndComp
+$Comp
+L power:+3.3V #PWR040
+U 1 1 60787F95
+P 1300 4700
+F 0 "#PWR040" H 1300 4550 50  0001 C CNN
+F 1 "+3.3V" H 1315 4873 50  0000 C CNN
+F 2 "" H 1300 4700 50  0001 C CNN
+F 3 "" H 1300 4700 50  0001 C CNN
+	1    1300 4700
+	1    0    0    -1  
+$EndComp
+$Comp
+L power:+5V #PWR039
+U 1 1 60788A4D
+P 1600 6400
+F 0 "#PWR039" H 1600 6250 50  0001 C CNN
+F 1 "+5V" H 1615 6573 50  0000 C CNN
+F 2 "" H 1600 6400 50  0001 C CNN
+F 3 "" H 1600 6400 50  0001 C CNN
+	1    1600 6400
+	1    0    0    -1  
+$EndComp
+Text HLabel 10400 1950 0    50   Output ~ 0
+np_ctl
+Wire Wire Line
+	10400 1950 10550 1950
+Text HLabel 7150 1600 2    50   Output ~ 0
+np_ctl
+Wire Wire Line
+	6800 1600 7150 1600
 $EndSCHEMATC
