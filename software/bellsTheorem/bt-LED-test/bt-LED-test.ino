@@ -2,7 +2,8 @@
 
 #include <Wire.h>
 #include <Bounce2.h>
-#include <EEPROM.h> // for saving state, eventually
+//#include <ADC.h> // super complex and not very well documented afaict
+#include <EEPROM.h> // for saving state
 #include <Adafruit_NeoPixel.h>
 
 /*
@@ -54,9 +55,10 @@
 #define DAB 22
 #define ABCD 24
 #define NP 20
-// PixelCount: there are 9, but in the prototype there's an extra one used for level shifting
+// there are 9, but in the prototype there's an extra one used for level shifting
 #define PC 10
 
+// stuff for bell's Theorem testing
 // fixed point, 3 digit representation of cosine squared, for integer angles 0 - 90
 const unsigned short PROGMEM cos2Table[] = { // 3E8 == 1000 decimal
   0x3E8,0x3E8,0x3E6,0x3E6,0x3E4,0x3E0,0x3DE,0x3DA,0x3D4,0x3D0,
@@ -69,6 +71,7 @@ const unsigned short PROGMEM cos2Table[] = { // 3E8 == 1000 decimal
   0x75,0x6A,0x5F,0x55,0x4C,0x43,0x3B,0x33,0x2B,0x24,
   0x1E,0x18,0x13,0xF,0xB,0x8,0x5,0x3,0x1,0x0,0x0
 };
+
 
 // Gamma brightness lookup table <https://victornpb.github.io/gamma-table-generator>
 // gamma = 2.5 steps = 1024 range = 0-1023
@@ -139,6 +142,9 @@ const uint16_t PROGMEM gamma10[] = {
    986, 988, 991, 993, 996, 998,1001,1003,1006,1008,1011,1013,1016,1018,1021,1023,
   };
 
+
+
+
 // Global variables for the encoders that are saved between calls:
 const uint8_t encPins[8] = {ENCAA, ENCAB, ENCBA, ENCBB, ENCCA, ENCCB, ENCDA, ENCDB};//encoder pins defined above
 static uint8_t enc_PrevNextCode[4] = {0, 0, 0, 0};//used by enc driver
@@ -157,7 +163,7 @@ Bounce *debounce[4] = {&debA, &debB, &debC, &debD} ;
 byte cv_in_pins[4] = { CVA, CVB, CVC, CVD };
 long cv_values[4] = { 0, 0, 0, 0 };
 
-const unsigned short maximumOutput = 1023;
+const unsigned short maximumOutput = 0x3FF; //1023
 // we start at 0 degrees, so everything is maxed out (until such time as we start taking input)
 short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
                     maximumOutput, maximumOutput, maximumOutput, maximumOutput,
@@ -166,11 +172,6 @@ short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
 // positions correspond to the value table
 byte pinTable[13] = {
   A, B, C, D, AB, BC, CD, DA, ABC, BCD, CDA, DAB, ABCD
-};
-
-// what are the pixel numbers of each position.  A-D are not used so they are zeroes
-byte pixelTable[13] = {
-  0, 0, 0, 0, 6, 9, 4, 1, 7, 8, 3, 2, 5 
 };
 
 unsigned short inputValue = maximumOutput;                    
@@ -192,7 +193,10 @@ Adafruit_NeoPixel strip(PC, NP, NEO_GRB + NEO_KHZ800);
 //   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
 //   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
 
-
+int brights[10] = { 0, 0, 32, 64, 96, 128, 160, 192, 224, 255 };
+int incr[10] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+short encbrights[4] = { 0, 341, 682, 1023 };
+short encincr[4] = { 4, 4, 4, 4 };
 
 void setup() {  
   for (int i=0; i<4; i++) {
@@ -212,7 +216,7 @@ void setup() {
   pinMode(CV_IN, INPUT);
   analogReadRes(10); // 10 bit resolution
   analogReadAveraging(3); // just pick a number to try and reduce jitter
-  
+
   Serial.begin(115200);
   Serial.println("Bell's Theorem startup");
   Serial.print(F("F_CPU = "));
@@ -225,94 +229,135 @@ void setup() {
   strip.setBrightness(50);
   //strip.clear();
 
-  startupSeq();
+  for (int i = 0; i < 4; i++) {
+    analogWrite(pinTable[i], 0);
+  }
+  delay(1000);
+  for (int i = 0; i < 4; i++) {
+    analogWrite(pinTable[i], gamma10[512]);
+  }
+  delay(1000);
+  for (int i = 0; i < 4; i++) {
+    analogWrite(pinTable[i], 1023);
+  }
+  delay(1000);
+  for (int i = 0; i < 4; i++) {
+    analogWrite(pinTable[i], gamma10[512]);
+  }
+  delay(1000);
+  for (int i = 0; i < 4; i++) {
+    analogWrite(pinTable[i], 0);
+  }
 }
 
 // for checking loop times
 long lastMicros = 0;
 long curMicros = 0;
 
+
+
 void loop() { 
-//   curMicros = micros();
-//   Serial.print("Loop time: "); Serial.println(curMicros - lastMicros);
-//   lastMicros = curMicros;
-  //Serial.println("updating buttons");
-  // consider long press saving to EEPROM or restoring from EEPROM
-  // use duration() method later for mode changes
-  for (int i=0; i < 4; i++) {
-    debounce[i]->update();
-    if (debounce[i]->fell()) {
-      // Serial.print("got button press "); Serial.print(i); Serial.println();
-      if (savedAngle[i] == 0) { // we don't have a saved angle
-        savedAngle[i] = angle[i];
-        angle[i] = 0;
-      } else {  // we do have a saved angle, let's restore it
-        angle[i] = savedAngle[i];
-        savedAngle[i] = 0;
-      }
+  for (int i = 1; i < strip.numPixels(); i++) {
+        strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(0, 0, brights[i])));
+        brights[i] += incr[i];
+        if (brights[i] > 255) {
+          brights[i] = 254;
+          incr[i] = -1;
+        }
+        if (brights[i] < 0) {
+          brights[i] = 1;
+          incr[i] = 1;
+        }
+    strip.show();
+    //delay(10);
+  }
+  for (int i = 0; i < 4; i++) {
+    analogWrite(pinTable[i], gamma10[encbrights[i]]);
+    encbrights[i] += encincr[i];
+    if (encbrights[i] > 1023) {
+      encbrights[i] = 1020;
+      encincr[i] = -4;
     }
-    
-//    long prevAngle = angle[i];
-    angle[i] = constrainAngle(angle[i] + read_rotary(i) * angleScale);
-    // cv_values[i] = (long)(analogRead(cv_in_pins[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
-    cv_values[i] = 0;  // THERE IS SIGNIFICNANT JITTER IN THE ANALOG READ HERE
-    angle_sum[i] = constrainAngle(cv_values[i] + angle[i]);
-//    if (prevAngle != angle[i]) {
-//      Serial.print("angle "); Serial.print(i); Serial.print(" : "); Serial.print(angle[i]); Serial.println();
+    if (encbrights[i] < 0) {
+      encbrights[i] = 3;
+      encincr[i] = 4;
+    }
+  }
+////   curMicros = micros();
+////   Serial.print("Loop time: "); Serial.println(curMicros - lastMicros);
+////   lastMicros = curMicros;
+//  //Serial.println("updating buttons");
+//  // consider long press saving to EEPROM or restoring from EEPROM
+//  // use duration() method later for mode changes
+//  for (int i=0; i < 4; i++) {
+//    debounce[i]->update();
+//    if (debounce[i]->fell()) {
+//      // Serial.print("got button press "); Serial.print(i); Serial.println();
+//      if (savedAngle[i] == 0) { // we don't have a saved angle
+//        savedAngle[i] = angle[i];
+//        angle[i] = 0;
+//      } else {  // we do have a saved angle, let's restore it
+//        angle[i] = savedAngle[i];
+//        savedAngle[i] = 0;
+//      }
 //    }
-  }
-   
-  // ok angle is set, now check the relationship to adjacent lenses
-  for (int i = 0; i < 4; i++) {  
-//    long prevRelAngle = relativeAngle[i];
-    relativeAngle[i] = constrainAngle(angle_sum[mod(i+1,4)] - angle_sum[i]); // maximum difference is 360
-//    if (prevRelAngle != relativeAngle[i]) {
-//      Serial.print("relative angle "); Serial.print(i); Serial.print(" : "); Serial.print(relativeAngle[i]); Serial.println();
+//    
+////    long prevAngle = angle[i];
+//    angle[i] = constrainAngle(angle[i] + read_rotary(i) * angleScale);
+//    cv_values[i] = (long)(analogRead(cv_in_pins[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
+//    //cv_values[i] = 0;  // THERE IS SIGNIFICNANT JITTER IN THE ANALOG READ HERE
+//    angle_sum[i] = constrainAngle(cv_values[i] + angle[i]);
+////    if (prevAngle != angle[i]) {
+////      Serial.print("angle "); Serial.print(i); Serial.print(" : "); Serial.print(angle[i]); Serial.println();
+////    }
+//  }
+//   
+//  // ok angle is set, now check the relationship to adjacent lenses
+//  for (int i = 0; i < 4; i++) {  
+////    long prevRelAngle = relativeAngle[i];
+//    relativeAngle[i] = constrainAngle(angle_sum[mod(i+1,4)] - angle_sum[i]); // maximum difference is 360
+////    if (prevRelAngle != relativeAngle[i]) {
+////      Serial.print("relative angle "); Serial.print(i); Serial.print(" : "); Serial.print(relativeAngle[i]); Serial.println();
+////    }
+//  }
+//  // now to do A->C and B->D for doing CDA (actually ACD) and DAB (actually ABD)
+//  relativeAngle[4] = constrainAngle(angle_sum[2] - angle_sum[0]); // C - A
+//  relativeAngle[5] = constrainAngle(angle_sum[3] - angle_sum[1]); // D - B
+//
+//  inputValue = analogRead(CV_IN); 
+//  //Serial.println(inputValue);
+//  //inputValue = 1023; // for now we're going to see how well the various bits work
+//  
+//  for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles + the CV inputs
+//    value[i] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[i])]) / 1000);                          
+//    analogWrite(pinTable[i], value[i]);
+//    if ((i+4) < 7) {
+//      value[i+4] = (short)((value[i] * cos2Table[constrainCos2(relativeAngle[i])]) / 1000);
+//    } else { // position 7 is DA, should use A value * AD angle, not D value * AD angle
+//      value[i+4] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[i])]) / 1000);
 //    }
-  }
-  // now to do A->C and B->D for doing CDA (actually ACD) and DAB (actually ABD)
-  relativeAngle[4] = constrainAngle(angle_sum[2] - angle_sum[0]); // C - A
-  relativeAngle[5] = constrainAngle(angle_sum[3] - angle_sum[1]); // D - B
-
-  inputValue = 1023; // is the input jittery or is the display jittery?
-  //inputValue = analogRead(CV_IN); 
-  //Serial.println(inputValue);
-  //inputValue = 1023; // for now we're going to see how well the various bits work
-  
-  for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles + the CV inputs
-    value[i] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[i])]) / 1000);                          
-    analogWrite(pinTable[i], value[i]);
-    if ((i+4) < 7) {
-      value[i+4] = (short)((value[i] * cos2Table[constrainCos2(relativeAngle[i])]) / 1000);
-    } else { // position 7 is DA, should use A value * AD angle, not D value * AD angle
-      value[i+4] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[i])]) / 1000);
-    }
-    analogWrite(pinTable[i+4], value[i+4]);
-    strip.setPixelColor(pixelTable[i+4], strip.gamma32(strip.ColorHSV(0,0,value[i+4]>>2)));
-    switch (i+8) {
-      case 10:  // CDA actually is ACD -- need to double check we don't get overflow here
-        value[10] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[4])] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000000);
-        break;
-      case 11:  // DAB actually is ABD
-        value[11] = (short)((value[4] * cos2Table[constrainCos2(relativeAngle[5])]) / 1000);
-        break;
-      default:
-      value[i+8] = (short)((value[i+4] * cos2Table[constrainCos2(relativeAngle[mod(i+1,4)])]) / 1000);
-    }
-    analogWrite(pinTable[i+8], value[i+8]);
-    strip.setPixelColor(pixelTable[i+8], strip.gamma32(strip.ColorHSV(0,0,value[i+8]>>2)));
-  }
-  // still gotta do ABCD
-  value[12] = (short)((value[8] * cos2Table[constrainCos2(relativeAngle[2])])/1000);
-  analogWrite(pinTable[12], value[12]);
-  strip.setPixelColor(pixelTable[12], strip.gamma32(strip.ColorHSV(0,0,value[12]>>2)));
-  strip.show();
-
-  // tracking the actual values -- when we start it should be all 1023, but it doesn't LOOK like it
-  for (int i = 0; i < 13; i++) {
-    Serial.print(value[i]); Serial.print(":");
-  }
-  Serial.println(); 
+//    analogWrite(pinTable[i+4], value[i+4]);
+//    switch (i+8) {
+//      case 10:  // CDA actually is ACD -- need to double check we don't get overflow here
+//        value[10] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[4])] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000000);
+//        break;
+//      case 11:  // DAB actually is ABD
+//        value[11] = (short)((value[4] * cos2Table[constrainCos2(relativeAngle[5])]) / 1000);
+//        break;
+//      default:
+//      value[i+8] = (short)((value[i+4] * cos2Table[constrainCos2(relativeAngle[mod(i+1,4)])]) / 1000);
+//    }
+//    analogWrite(pinTable[i+8], value[i+8]);
+//  }
+//  // still gotta do ABCD
+//  value[12] = (short)((value[8] * cos2Table[constrainCos2(relativeAngle[2])])/1000);
+//  analogWrite(pinTable[12], value[12]);
+//
+//  // tracking the actual values -- when we start it should be all 1023, but it doesn't LOOK like it
+////  for (int i = 0; i < 13; i++) {
+////    Serial.print(value[i]); Serial.print(":");
+////  }
+////  Serial.println(); 
 }
 
 
@@ -362,9 +407,5 @@ int8_t read_rotary(uint8_t num) {
       if ((enc_Store[num]&0xff)==0x17) return 1;
    }
    return 0;
-}
-
-void startupSeq() {
-  return;
 }
   

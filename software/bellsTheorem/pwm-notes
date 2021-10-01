@@ -1,0 +1,20 @@
+FlexPWM pins:
+0 1 2 3 4 5 6 7 8 9
+22 23 24 25
+28 29
+33
+36 37
+42 43 44 45 46 47
+51
+53
+
+
+minus what I'm already using
+7 8 9
+28 29
+33
+36 37
+
+42 43 44 45 46 47 except these are the SD card pins???
+51  pin 1 of bigger memory chip
+53  pin 6 of both memory chips
