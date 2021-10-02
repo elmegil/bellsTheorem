@@ -1,5 +1,6 @@
 # bellsTheorem
 [![License: CC BY-NC 4.0](https://licensebuttons.net/l/by-nc/4.0/80x15.png)]
+
 Bell's theorem is a proof that quantum physics is incompatible with local hidden variable theories.  The summary on Wikipedia is quite good if you’re interested in the quantum physics aspects of the theorem.
 
 The proof is sometimes demonstrated by the use of multiple polarized lenses, as in this video:
