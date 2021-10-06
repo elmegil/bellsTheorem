@@ -201,7 +201,6 @@ void setup() {
   }
   
   for (int i=0; i<13; i++) {
-    // pinMode(pinTable[i], OUTPUT); // not necessary and actually "OUTPUT" is a digital output
     analogWriteFrequency(pinTable[i], 146484);
   }
   analogWriteResolution(10);
@@ -231,6 +230,7 @@ void setup() {
 // for checking loop times
 long lastMicros = 0;
 long curMicros = 0;
+int count = 0;
 
 void loop() { 
 //   curMicros = micros();
@@ -251,11 +251,11 @@ void loop() {
         savedAngle[i] = 0;
       }
     }
-    
+ 
 //    long prevAngle = angle[i];
     angle[i] = constrainAngle(angle[i] + read_rotary(i) * angleScale);
-    // cv_values[i] = (long)(analogRead(cv_in_pins[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
-    cv_values[i] = 0;  // THERE IS SIGNIFICNANT JITTER IN THE ANALOG READ HERE
+    cv_values[i] = (long)(analogRead(cv_in_pins[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
+    // cv_values[i] = 0;  // THERE IS SIGNIFICNANT JITTER IN THE ANALOG READ HERE
     angle_sum[i] = constrainAngle(cv_values[i] + angle[i]);
 //    if (prevAngle != angle[i]) {
 //      Serial.print("angle "); Serial.print(i); Serial.print(" : "); Serial.print(angle[i]); Serial.println();
@@ -274,12 +274,14 @@ void loop() {
   relativeAngle[4] = constrainAngle(angle_sum[2] - angle_sum[0]); // C - A
   relativeAngle[5] = constrainAngle(angle_sum[3] - angle_sum[1]); // D - B
 
-  inputValue = 1023; // is the input jittery or is the display jittery?
-  //inputValue = analogRead(CV_IN); 
+  // inputValue = 1023; // is the input jittery or is the display jittery?
+  inputValue = analogRead(CV_IN); 
   //Serial.println(inputValue);
   //inputValue = 1023; // for now we're going to see how well the various bits work
   
   for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles + the CV inputs
+    // how do we do with just the inputValue, are we reproducing it well or not?
+    //analogWrite(pinTable[i], inputValue);
     value[i] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[i])]) / 1000);                          
     analogWrite(pinTable[i], value[i]);
     if ((i+4) < 7) {
@@ -307,12 +309,21 @@ void loop() {
   analogWrite(pinTable[12], value[12]);
   strip.setPixelColor(pixelTable[12], strip.gamma32(strip.ColorHSV(0,0,value[12]>>2)));
   strip.show();
-
+  // going to pulse ABCD output to time the loop externally
+//  count = ((count + 1) % 3);
+//  if (count == 0) {
+//    analogWrite(pinTable[12], 1023); delayMicroseconds(500);
+//    analogWrite(pinTable[12], 0);  delayMicroseconds(500);
+//  }
+//  } else {
+//    analogWrite(pinTable[12], 0); delayMicroseconds(500);
+//    analogWrite(pinTable[12], 0); delayMicroseconds(500);
+//  }
   // tracking the actual values -- when we start it should be all 1023, but it doesn't LOOK like it
-  for (int i = 0; i < 13; i++) {
-    Serial.print(value[i]); Serial.print(":");
-  }
-  Serial.println(); 
+//  for (int i = 0; i < 13; i++) {
+//    Serial.print(value[i]); Serial.print(":");
+//  }
+//  Serial.println(); 
 }
 
 
