@@ -1,9 +1,17 @@
-
-
 #include <Wire.h>
 #include <Bounce2.h>
 #include <EEPROM.h> // for saving state, eventually
 #include <Adafruit_NeoPixel.h>
+
+
+/*
+ * Copyright (c) 2022 Frogleg Synthesis/Pete Hartman
+ * 
+ * Many thanks due to Jim Matheson for advice and coaching on how to work with Teensy, as well as some of the hardware details
+ * This project wouldn't have been undertaken without the questions from Nyles Miszczyk on Facebook's Synth DIY group, about Bell's Theorem
+ * 
+ */
+
 
 /*
    EEPROM notes
@@ -15,10 +23,14 @@
    no specific address map, just an array of bytes
 */
 
-#define DEBUG 1
+//#define DEBUG 1
 
+// TODO NEXT VERSION
 //
-// New revision of the board 0.3 now uses pin 20 as a NeoPixel serial control for the LEDs *except* the
+// 0.4 will require the Teensy to poke the enable bit for the 3.3V regulator!
+
+
+// New revision of the board 0.3+ uses pin 20 as a NeoPixel serial control for the LEDs *except* the
 // LEDs for the encoders.
 //
 
@@ -107,6 +119,9 @@ byte pinTable[13] = {
 byte pixelTable[13] = {
   0, 0, 0, 0, 6, 9, 4, 1, 7, 8, 3, 2, 5
 };
+// 10922 is yellow, 21845 is red, 14000 is a little yellower than the middle between them to get orange
+short HueTable[13] = { 0, 0, 0, 0, 10922, 10922, 10922, 10922, 14000, 14000, 14000, 14000, 21845 }; 
+
 
 unsigned short inputValue = maximumOutput;
 unsigned short prevValue = maximumOutput;
@@ -121,6 +136,7 @@ long prevAngle[4] = { 0, 0, 0, 0 }; // see if we changed
 long savedAngle[4] = { 0, 0, 0, 0 }; // "undo" of unintentional clicks
 long relativeAngle[6] = { 0, 0, 0, 0, 0, 0 }; // relative angle of each pair A->B, B->C, C->D, D->A, plus A->C and B->D
 long angle_sum[4] = { 0, 0, 0, 0 }; // hold angle + cv
+
 
 // Declare our NeoPixel strip object:
 Adafruit_NeoPixel strip(PC, NP, NEO_GRB + NEO_KHZ800);
@@ -147,16 +163,21 @@ short temp = 0;
 // do the math in the loop?
 
 void setup() {
+  // enable the 3.3V regulator!
+
+  // set up for encoder button debouncing
   for (int i = 0; i < 4; i++) {
     debounce[i]->attach(enc_button_pins[i], INPUT);
     debounce[i]->interval(25); // 25ms ebounce time
   }
 
+  // analog write
   for (int i = 0; i < 13; i++) {
     analogWriteFrequency(pinTable[i], 146484);
   }
   analogWriteResolution(10);
 
+  // input setup
   for (int i = 0; i < 4; i++) {
     pinMode(cv_in_pin[i], INPUT);
   }
@@ -164,6 +185,7 @@ void setup() {
   analogReadRes(10); // 10 bit resolution
   analogReadAveraging(3); // just pick a number to try and reduce jitter
 
+  // for DEBUG if needed
   Serial.begin(115200);
   Serial.println("Bell's Theorem startup");
   Serial.print(F("F_CPU = "));
@@ -176,9 +198,10 @@ void setup() {
   strip.setBrightness(50);
   strip.clear();
 
+  // interrupt timers for main I/O and controls
   ioTimer.begin(doIO, 20.833); // was 20.833 for 48khz
   ioTimer.priority(10);
-  ctlTimer.begin(getControl, 333); // 580 is about the minimum we can use to call this, any faster and it doesn't seem to ever complete
+  ctlTimer.begin(getControl, 333);
   ctlTimer.priority(50);
 
   startupSeq(); // eventually something to blink lights and show we're alive
@@ -195,8 +218,17 @@ void setup() {
 //
 //   on control change, make update and kick the model to do the calculations
 //
-// simplified model & task:  single input (encA + CVA), run through cos2 table, single output
-// next iteration: two inputs (angle A and main input), same task, same output
+// 2022-01-16 currently core function complete, modified from above MVC:
+//
+// "view" analog read main input, write analog outputs
+// "controller" read encoders and angle CVs, update angles
+// "model" main loop, handle encoder switch presses, do the math if the input is changed, display the NeoPixels
+//         display of the neopixels is in the main loop because 1) it's slower and 2) if the pretty lights lag the actual outputs a slight bit, not a big deal
+//
+// practical limits seem to be about 50Hz to have reasonable input/output correspondence.  
+// 100Hz and higher tends to round off a direct output (input -> output without doing the math)
+// There is about 1ms lag doing input -> output without the math
+
 
 void loop() {
 //  if (valChanged) {
@@ -247,10 +279,10 @@ void loop() {
       outChanged = true;
       inChanged = false;
     }
-//  display does not have to be done at full output speed
+    //  display does not have to be done at full output speed
     if (outChanged) {
       for (int i = 4; i < 13; i++) {
-        strip.setPixelColor(pixelTable[i], strip.gamma32(strip.ColorHSV(0, 0, value[i] >> 2)));
+        strip.setPixelColor(pixelTable[i], strip.gamma32(strip.ColorHSV(HueTable[i], value[i] >> 2, value[i] >> 2))); // white is 0, 0, value
       }
       strip.show();
     }
@@ -273,9 +305,9 @@ long constrainAngle(long angle) {  // limit angles to -180 to +180
 
 // funky modulus appropriate for wrapping at 0, instead of -modulus; good for wrapping around arrays
 // no longer needed, unrolled loops
-int mod( int x, int y ){
-   return (x<0 ? ((x+1)%y)+y-1 : x%y);
-}
+//int mod( int x, int y ){
+//   return (x<0 ? ((x+1)%y)+y-1 : x%y);
+//}
 
 //You can make an intervaltimer and do lookups and update from that.
 //that becomes your sample rate. say you wanted it to be 48khz, divide
@@ -299,9 +331,6 @@ void doIO() {  // violates the rules of "don't call other stuff"
     outChanged = false;
   }
 }
-
-//byte cv_in_pins[4] = { CVA, CVB, CVC, CVD };
-//long cv_values[4] = { 0, 0, 0, 0 };
 
 void getControl() {
   for (int i=0; i < 4; i++) {
