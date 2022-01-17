@@ -86,17 +86,17 @@ Bounce debC = Bounce();
 Bounce debD = Bounce();
 Bounce *debounce[4] = {&debA, &debB, &debC, &debD} ;
 
-byte cv_in_pins[4] = { CVA, CVB, CVC, CVD };
-long cv_values[4] = { 0, 0, 0, 0 };
+byte cv_in_pin[4] = { CVA, CVB, CVC, CVD };
+long cv_value[4] = { 0, 0, 0, 0 };
 
 const unsigned short maximumOutput = 1023;
 // we start at 0 degrees, so everything is maxed out (until such time as we start taking input)
-//short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
-//                    maximumOutput, maximumOutput, maximumOutput, maximumOutput,
-//                    maximumOutput, maximumOutput, maximumOutput, maximumOutput,
-//                    maximumOutput
-//                  };
-short value[13] = { maximumOutput, 0,0,0,0,0,0,0,0,0,0,0,0 };
+short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
+                    maximumOutput, maximumOutput, maximumOutput, maximumOutput,
+                    maximumOutput, maximumOutput, maximumOutput, maximumOutput,
+                    maximumOutput
+                  };
+//short value[13] = { maximumOutput,0,0,0,0,0,0,0,0,0,0,0,0 };
 
 // positions correspond to the value table
 byte pinTable[13] = {
@@ -110,7 +110,8 @@ byte pixelTable[13] = {
 
 unsigned short inputValue = maximumOutput;
 unsigned short prevValue = maximumOutput;
-boolean valChanged = false; // if nothing changes, why do any extra work?
+boolean inChanged = false; // if nothing changes, why do any extra work?
+boolean outChanged = false; // if nothing changes, why do any extra work?
 boolean vc = false; // for use inside the control ISR
 
 const short angleScale = 10;
@@ -132,7 +133,7 @@ Adafruit_NeoPixel strip(PC, NP, NEO_GRB + NEO_KHZ800);
 //   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
 //   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
 
-IntervalTimer outputTimer;
+IntervalTimer ioTimer;
 IntervalTimer ctlTimer;
 
 // for checking loop times
@@ -157,7 +158,7 @@ void setup() {
   analogWriteResolution(10);
 
   for (int i = 0; i < 4; i++) {
-    pinMode(cv_in_pins[i], INPUT);
+    pinMode(cv_in_pin[i], INPUT);
   }
   pinMode(CV_IN, INPUT);
   analogReadRes(10); // 10 bit resolution
@@ -175,9 +176,9 @@ void setup() {
   strip.setBrightness(50);
   strip.clear();
 
-  outputTimer.begin(doOutput, 20.833); // was 20.833 for 48khz
-  outputTimer.priority(10);
-  ctlTimer.begin(getControl, 100); // 580 is about the minimum we can use to call this, any faster and it doesn't seem to ever complete
+  ioTimer.begin(doIO, 20.833); // was 20.833 for 48khz
+  ioTimer.priority(10);
+  ctlTimer.begin(getControl, 333); // 580 is about the minimum we can use to call this, any faster and it doesn't seem to ever complete
   ctlTimer.priority(50);
 
   startupSeq(); // eventually something to blink lights and show we're alive
@@ -199,40 +200,60 @@ void setup() {
 
 void loop() {
 //  if (valChanged) {
-   // A->B, B->C, C->D, A->D
-//      relativeAngle[0] = constrainAngle(angle_sum[1] - angle_sum[0]);
-//      relativeAngle[1] = constrainAngle(angle_sum[2] - angle_sum[1]);
-//      relativeAngle[2] = constrainAngle(angle_sum[3] - angle_sum[2]);
-//      relativeAngle[3] = constrainAngle(angle_sum[3] - angle_sum[0]);
-//      // now to do A->C and B->D for doing CDA (actually ACD) and DAB (actually ABD)
-//      relativeAngle[4] = constrainAngle(angle_sum[2] - angle_sum[0]); // C - A
-//      relativeAngle[5] = constrainAngle(angle_sum[3] - angle_sum[1]); // D - B
 
-  // A, B, C, D
-//      value[0] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[0])]) / 1000);
-//      value[1] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[1])]) / 1000);
-//      value[2] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[2])]) / 1000);
-//      value[3] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[3])]) / 1000);
-//      // AB, BC, CD, DA (AD)
-//      value[4] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[0])]) / 1000);
-//      value[5] = (short)((value[1] * cos2Table[constrainCos2(relativeAngle[1])]) / 1000);
-//      value[6] = (short)((value[2] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000);
-//      // position 7 is DA, should use A value * AD angle, not D value * AD angle
-//      value[7] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[3])]) / 1000);
-//      // ABC, BCD, CDA (ACD), DAB (ABD)
-//      value[8] = (short)((value[4] * cos2Table[constrainCos2(relativeAngle[1])]) / 1000);
-//      value[9] = (short)((value[5] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000);
-//      // AC is special, there is no intermediate AC created before this
-//      value[10] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[4])] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000000);
-//      value[11] = (short)((value[4] * cos2Table[constrainCos2(relativeAngle[5])]) / 1000);
-//      value[12] = (short)((value[8] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000);
-//  } else {
 //  }
-//  display does not have to be done at full output speed
-    for (int i = 4; i < 13; i++) {
-      strip.setPixelColor(pixelTable[i], strip.gamma32(strip.ColorHSV(0, 0, value[i] >> 2)));
+    for (int i=0; i < 4; i++) {
+    debounce[i]->update();
+      if (debounce[i]->fell()) {
+        // Serial.print("got button press "); Serial.print(i); Serial.println();
+        if (savedAngle[i] == 0) { // we don't have a saved angle
+          savedAngle[i] = angle[i];
+          angle[i] = 0;
+        } else {  // we do have a saved angle, let's restore it
+          angle[i] = savedAngle[i];
+          savedAngle[i] = 0;
+        }
+      }
+      inChanged = true;
     }
-    strip.show();
+    if (inChanged) {
+      // unrolled loops
+      // A->B, B->C, C->D, A->D
+      relativeAngle[0] = constrainAngle(angle_sum[1] - angle_sum[0]);
+      relativeAngle[1] = constrainAngle(angle_sum[2] - angle_sum[1]);
+      relativeAngle[2] = constrainAngle(angle_sum[3] - angle_sum[2]);
+      relativeAngle[3] = constrainAngle(angle_sum[3] - angle_sum[0]);
+      // now to do A->C and B->D for doing CDA (actually ACD) and DAB (actually ABD)
+      relativeAngle[4] = constrainAngle(angle_sum[2] - angle_sum[0]); // C - A
+      relativeAngle[5] = constrainAngle(angle_sum[3] - angle_sum[1]); // D - B
+      // A, B, C, D
+      value[0] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[0])]) / 1000);
+      value[1] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[1])]) / 1000);
+      value[2] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[2])]) / 1000);
+      value[3] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[3])]) / 1000);
+      // AB, BC, CD, DA (AD)
+      value[4] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[0])]) / 1000);
+      value[5] = (short)((value[1] * cos2Table[constrainCos2(relativeAngle[1])]) / 1000);
+      value[6] = (short)((value[2] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000);
+      // position 7 is DA, should use A value * AD angle, not D value * AD angle
+      value[7] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[3])]) / 1000);
+      // ABC, BCD, CDA (ACD), DAB (ABD)
+      value[8] = (short)((value[4] * cos2Table[constrainCos2(relativeAngle[1])]) / 1000);
+      value[9] = (short)((value[5] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000);
+      // AC is special, there is no intermediate AC created before this
+      value[10] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[4])] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000000);
+      value[11] = (short)((value[4] * cos2Table[constrainCos2(relativeAngle[5])]) / 1000);
+      value[12] = (short)((value[8] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000);
+      outChanged = true;
+      inChanged = false;
+    }
+//  display does not have to be done at full output speed
+    if (outChanged) {
+      for (int i = 4; i < 13; i++) {
+        strip.setPixelColor(pixelTable[i], strip.gamma32(strip.ColorHSV(0, 0, value[i] >> 2)));
+      }
+      strip.show();
+    }
 }
 
 
@@ -264,50 +285,37 @@ int mod( int x, int y ){
 //doesn’t have so much work to do. you can set the audio timer to high
 //priority so other things don’t block it. -- JM 2021-10-05
 
-void doOutput() {  // violates the rules of "don't call other stuff"
+void doIO() {  // violates the rules of "don't call other stuff"
   inputValue = analogRead(CV_IN);
   if (inputValue != prevValue) {
     prevValue = inputValue;
-    value[pos] = inputValue; // just straight pass through of the input to output
-    valChanged = true;
+    inChanged = true;
   }
-  if (valChanged) {
-    valChanged = false;
-    for (int i = 0; i < 4; i++) {
+  // CV ins are aread in getControl, alongside rotary positions
+  if (outChanged) {
+    for (int i = 0; i < 13; i++) {
       analogWrite(pinTable[i], value[i]);
     }
-    for (int i = 4; i < 13; i++) {
-      analogWrite(pinTable[i], value[i]);
+    outChanged = false;
+  }
+}
+
+//byte cv_in_pins[4] = { CVA, CVB, CVC, CVD };
+//long cv_values[4] = { 0, 0, 0, 0 };
+
+void getControl() {
+  for (int i=0; i < 4; i++) {
+    angle[i] = constrainAngle(angle[i] + read_rotary(i) * angleScale);
+    cv_value[i] = (long)(analogRead(cv_in_pin[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
+    angle_sum[i] = constrainAngle(cv_value[i] + angle[i]);
+    if (angle_sum[i] != prevAngle[i]) {
+      prevAngle[i] = angle_sum[i];
+      inChanged = true;
     }
   }
 }
 
-
-void getControl() {
-  valChanged = false;
-
-//  for (int i=0; i < 4; i++) {
-//    debounce[i]->update();
-//    if (debounce[i]->fell()) {
-//      // Serial.print("got button press "); Serial.print(i); Serial.println();
-//      if (savedAngle[i] == 0) { // we don't have a saved angle
-//        savedAngle[i] = angle[i];
-//        angle[i] = 0;
-//      } else {  // we do have a saved angle, let's restore it
-//        angle[i] = savedAngle[i];
-//        savedAngle[i] = 0;
-//      }
-//      vc = true;
-//    }
-//    // might have to take the sum part out and put into the main loop, in which case we'll need 2 "prevAngle" arrays
-//    angle[i] = constrainAngle(angle[i] + read_rotary(i) * angleScale);
-//    cv_values[i] = (long)(analogRead(cv_in_pins[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
-//    angle_sum[i] = constrainAngle(cv_values[i] + angle[i]);
-//    if (angle_sum[i] != prevAngle[i]) {
-//      prevAngle[i] = angle_sum[i];
-//      vc = true;
-//    }
-//  }
+//  alternate get control for testing
 //  use rotary to move the "maximumOutput" value through the positions
 //  This code works as expected
 //    temp = value[pos];
@@ -315,8 +323,6 @@ void getControl() {
 //    pos = mod(pos + read_rotary(0),13); 
 //    value[pos] = temp;
 
-  //valChanged = vc;
-}
 
 
 // Jim Matheson's encoder driver
