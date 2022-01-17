@@ -177,7 +177,7 @@ void setup() {
 
   outputTimer.begin(doOutput, 20.833); // was 20.833 for 48khz
   outputTimer.priority(10);
-  ctlTimer.begin(getControl, 580); // 580 is about the minimum we can use to call this, any faster and it doesn't seem to ever complete
+  ctlTimer.begin(getControl, 100); // 580 is about the minimum we can use to call this, any faster and it doesn't seem to ever complete
   ctlTimer.priority(50);
 
   startupSeq(); // eventually something to blink lights and show we're alive
@@ -265,6 +265,12 @@ int mod( int x, int y ){
 //priority so other things don’t block it. -- JM 2021-10-05
 
 void doOutput() {  // violates the rules of "don't call other stuff"
+  inputValue = analogRead(CV_IN);
+  if (inputValue != prevValue) {
+    prevValue = inputValue;
+    value[pos] = inputValue; // just straight pass through of the input to output
+    valChanged = true;
+  }
   if (valChanged) {
     valChanged = false;
     for (int i = 0; i < 4; i++) {
@@ -272,10 +278,7 @@ void doOutput() {  // violates the rules of "don't call other stuff"
     }
     for (int i = 4; i < 13; i++) {
       analogWrite(pinTable[i], value[i]);
-      // display does not have to happen at full output speed, put it in the loop instead
-      //strip.setPixelColor(pixelTable[i], strip.gamma32(strip.ColorHSV(0, 0, value[i] >> 2)));
     }
-    //strip.show();
   }
 }
 
@@ -283,12 +286,6 @@ void doOutput() {  // violates the rules of "don't call other stuff"
 void getControl() {
   valChanged = false;
 
-  inputValue = analogRead(CV_IN);
-  if (inputValue != prevValue) {
-    prevValue = inputValue;
-    value[pos] = inputValue; // just straight pass through of the input to output
-    vc = true;
-  }
 //  for (int i=0; i < 4; i++) {
 //    debounce[i]->update();
 //    if (debounce[i]->fell()) {
@@ -318,7 +315,7 @@ void getControl() {
 //    pos = mod(pos + read_rotary(0),13); 
 //    value[pos] = temp;
 
-  valChanged = vc;
+  //valChanged = vc;
 }
 
 
