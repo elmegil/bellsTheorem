@@ -33,9 +33,9 @@
         "other_text_thickness": 0.15,
         "other_text_upright": false,
         "pads": {
-          "drill": 0.3,
-          "height": 0.6,
-          "width": 0.6
+          "drill": 2.1,
+          "height": 3.149999,
+          "width": 3.149999
         },
         "silk_line_width": 0.12,
         "silk_text_italic": false,
@@ -380,15 +380,14 @@
         "microvia_drill": 0.1,
         "name": "power",
         "nets": [
+          "+10V",
           "+12V",
           "+3V3",
           "+5V",
-          "-12V",
           "GND",
           "Net-(D1-Pad2)",
-          "Net-(D2-Pad1)",
-          "Net-(J1-Pad1)",
-          "Net-(J1-Pad10)"
+          "Net-(J1-Pad10)",
+          "Net-(J1-Pad11)"
         ],
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "schematic_color": "rgba(0, 0, 0, 0.000)",

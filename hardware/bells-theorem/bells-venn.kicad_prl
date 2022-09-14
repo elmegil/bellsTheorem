@@ -4,11 +4,7 @@
     "active_layer_preset": "All Layers",
     "auto_track_width": true,
     "hidden_nets": [
-      "+12V",
-      "-12V",
       "Net-(D1-Pad2)",
-      "Net-(D2-Pad1)",
-      "Net-(J1-Pad1)",
       "Net-(J1-Pad10)",
       "/main/CVB",
       "/main/CVA",
@@ -41,6 +37,7 @@
       "/main/ABCD",
       "/main/CVC",
       "/main/CVD",
+      "+10V",
       "+3V3",
       "/main/np_ctl"
     ],

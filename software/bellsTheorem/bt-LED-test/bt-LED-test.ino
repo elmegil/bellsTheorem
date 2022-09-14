@@ -56,7 +56,7 @@
 #define ABCD 24
 #define NP 20
 // there are 9, but in the prototype there's an extra one used for level shifting
-#define PC 10
+#define PC 13
 
 // stuff for bell's Theorem testing
 // fixed point, 3 digit representation of cosine squared, for integer angles 0 - 90
@@ -183,7 +183,7 @@ long relativeAngle[6] = { 0, 0, 0, 0, 0, 0 }; // relative angle of each pair A->
 long angle_sum[4] = { 0, 0, 0, 0 }; // hold angle + cv
 
 // Declare our NeoPixel strip object:
-Adafruit_NeoPixel strip(PC, NP, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip(PC, NP, NEO_RGB + NEO_KHZ800);
 // Argument 1 = Number of pixels in NeoPixel strip
 // Argument 2 = Arduino pin number (most are valid)
 // Argument 3 = Pixel type flags, add together as needed:
@@ -193,8 +193,9 @@ Adafruit_NeoPixel strip(PC, NP, NEO_GRB + NEO_KHZ800);
 //   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
 //   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
 
-int brights[10] = { 0, 0, 32, 64, 96, 128, 160, 192, 224, 255 };
-int incr[10] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+//int brights[13] = { 0, 16, 32, 48, 64, 80, 96, 128, 160, 176, 192, 224, 255 };
+int brights[13] = { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 };
+int incr[13] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 short encbrights[4] = { 0, 341, 682, 1023 };
 short encincr[4] = { 4, 4, 4, 4 };
 
@@ -226,7 +227,12 @@ void setup() {
   // NeoPixel LEDs
   strip.begin();
   strip.show();
-  strip.setBrightness(50);
+  // brightness of 255 has total current draw around 469mA (just running LEDs)
+  // brightness of 128 has total current draw around 341mA (just running LEDs)
+  // brigthness of 96 has total current draw around 285mA (just running LEDs)
+  // brightness of 80 has total current draw around 256mA (just running LEDs)
+  // brightness of 75 has a max current draw around 247mA (just running LEDs)
+  strip.setBrightness(75); // 0 - 255; 75 seems plenty bright
   //strip.clear();
 
   for (int i = 0; i < 4; i++) {
@@ -254,10 +260,15 @@ void setup() {
 long lastMicros = 0;
 long curMicros = 0;
 
+// color definitions
+#define RED 0
+#define GREEN 21845
+#define BLUE 43690
 
 
 void loop() { 
-  for (int i = 1; i < strip.numPixels(); i++) {
+  for (int i = 0; i < strip.numPixels(); i++) {
+        // strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(brights[i] * 255, 255, 255)));
         strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(0, 0, brights[i])));
         brights[i] += incr[i];
         if (brights[i] > 255) {
@@ -271,18 +282,18 @@ void loop() {
     strip.show();
     //delay(10);
   }
-  for (int i = 0; i < 4; i++) {
-    analogWrite(pinTable[i], gamma10[encbrights[i]]);
-    encbrights[i] += encincr[i];
-    if (encbrights[i] > 1023) {
-      encbrights[i] = 1020;
-      encincr[i] = -4;
-    }
-    if (encbrights[i] < 0) {
-      encbrights[i] = 3;
-      encincr[i] = 4;
-    }
-  }
+//  for (int i = 0; i < 4; i++) {
+//    analogWrite(pinTable[i], gamma10[encbrights[i]]);
+//    encbrights[i] += encincr[i];
+//    if (encbrights[i] > 1023) {
+//      encbrights[i] = 1020;
+//      encincr[i] = -4;
+//    }
+//    if (encbrights[i] < 0) {
+//      encbrights[i] = 3;
+//      encincr[i] = 4;
+//    }
+//  }
 ////   curMicros = micros();
 ////   Serial.print("Loop time: "); Serial.println(curMicros - lastMicros);
 ////   lastMicros = curMicros;

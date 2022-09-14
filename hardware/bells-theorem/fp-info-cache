@@ -1,4 +1,4 @@
-20007214502482907
+20023933513116245
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -84546,6 +84546,13 @@ Bourns PTL 45mm
 6
 6
 myfootprints
+Bourns PTV111-3
+
+
+0
+6
+4
+myfootprints
 C&K_round_pushbutton
 
 
@@ -84608,6 +84615,13 @@ dil dip 2.54 300
 0
 8
 8
+myfootprints
+DIP-28_600_EJECT-A-DIP
+
+
+0
+28
+28
 myfootprints
 DKM10A-12
 
@@ -84749,19 +84763,19 @@ MTA-100-10
 10
 10
 myfootprints
-MTA-156
-
-
-0
-4
-4
-myfootprints
 MTA-156-2
 
 
 0
 2
 2
+myfootprints
+MTA-156-3
+
+
+0
+3
+3
 myfootprints
 MTA-156-4
 
@@ -84784,7 +84798,7 @@ MountingHole_7mm_dia
 0
 0
 myfootprints
-MountingHole_9mm_dia
+MountingHole_9.2mm_dia
 
 
 0
@@ -84840,6 +84854,13 @@ RP3502MA-PB_SWITCH
 2
 2
 myfootprints
+SN76477 dual
+
+
+0
+56
+28
+myfootprints
 SOD-123
 SOD-123
 SOD-123
@@ -84882,6 +84903,20 @@ Simplified_Teensy30_31_32_LC
 37
 37
 myfootprints
+StonZ-logo
+
+
+0
+0
+0
+myfootprints
+StonZ-small
+
+
+0
+0
+0
+myfootprints
 Switchcraft_112AX_MONO
 
 
@@ -84902,6 +84937,13 @@ TO-5-6-spread
 0
 6
 6
+myfootprints
+TO-5-8
+
+
+0
+8
+8
 myfootprints
 Untitled
 
@@ -84995,6 +85037,20 @@ bells-venn-filled-back-mask
 0
 myfootprints
 bells-venn-filled-front-mask
+
+
+0
+0
+0
+myfootprints
+bells-venn-trefoil-mask
+
+
+0
+0
+0
+myfootprints
+bells-venn-trefoil-mask-inverse
 
 
 0
@@ -85126,6 +85182,13 @@ gator-texture
 0
 0
 0
+myfootprints
+impdrive_guardring
+
+
+0
+1
+1
 myfootprints
 klee-analogue
 
@@ -85357,6 +85420,13 @@ thonkiconn_tip3
 0
 3
 3
+myfootprints
+trefoil-mask2
+
+
+0
+0
+0
 myfootprints
 vernier1
 
