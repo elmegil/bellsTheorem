@@ -1,46 +1,9 @@
 {
   "board": {
-    "active_layer": 37,
-    "active_layer_preset": "All Layers",
+    "active_layer": 0,
+    "active_layer_preset": "",
     "auto_track_width": true,
-    "hidden_nets": [
-      "Net-(D1-Pad2)",
-      "Net-(J1-Pad10)",
-      "/main/CVB",
-      "/main/CVA",
-      "/main/IN",
-      "/main/ENCC_SW",
-      "/main/ENCC_B",
-      "/main/ENCC_A",
-      "/main/ENCD_SW",
-      "/main/ENCD_B",
-      "/main/ENCD_A",
-      "/main/ENCB_SW",
-      "/main/ENCB_B",
-      "/main/ENCB_A",
-      "/main/ENCA_SW",
-      "/main/ENCA_B",
-      "/main/ENCA_A",
-      "+5V",
-      "/main/A",
-      "/main/B",
-      "/main/C",
-      "/main/D",
-      "/main/AB",
-      "/main/BC",
-      "/main/CD",
-      "/main/DA",
-      "/main/ABC",
-      "/main/BCD",
-      "/main/CDA",
-      "/main/DAB",
-      "/main/ABCD",
-      "/main/CVC",
-      "/main/CVD",
-      "+10V",
-      "+3V3",
-      "/main/np_ctl"
-    ],
+    "hidden_nets": [],
     "high_contrast_mode": 0,
     "net_color_mode": 1,
     "opacity": {
@@ -103,7 +66,7 @@
     "zone_display_mode": 0
   },
   "meta": {
-    "filename": "bells-venn.kicad_prl",
+    "filename": "bells-venn-rounded.kicad_prl",
     "version": 3
   },
   "project": {
