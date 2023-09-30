@@ -1,11 +1,11 @@
-G04 #@! TF.GenerationSoftware,KiCad,Pcbnew,(6.0.0-0)*
-G04 #@! TF.CreationDate,2022-02-14T22:05:43-06:00*
+G04 #@! TF.GenerationSoftware,KiCad,Pcbnew,(6.0.5-0)*
+G04 #@! TF.CreationDate,2023-09-16T19:39:36-05:00*
 G04 #@! TF.ProjectId,bells-venn,62656c6c-732d-4766-956e-6e2e6b696361,rev?*
 G04 #@! TF.SameCoordinates,Original*
 G04 #@! TF.FileFunction,Profile,NP*
 %FSLAX46Y46*%
 G04 Gerber Fmt 4.6, Leading zero omitted, Abs format (unit mm)*
-G04 Created by KiCad (PCBNEW (6.0.0-0)) date 2022-02-14 22:05:43*
+G04 Created by KiCad (PCBNEW (6.0.5-0)) date 2023-09-16 19:39:36*
 %MOMM*%
 %LPD*%
 G01*

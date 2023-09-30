@@ -2305,7 +2305,7 @@
   (symbol (lib_id "power:+10V") (at 262.89 91.44 0) (unit 1)
     (in_bom yes) (on_board yes) (fields_autoplaced)
     (uuid 931f36c9-15f9-469f-bf14-4e347526def3)
-    (property "Reference" "#PWR?" (id 0) (at 262.89 95.25 0)
+    (property "Reference" "#PWR0125" (id 0) (at 262.89 95.25 0)
       (effects (font (size 1.27 1.27)) hide)
     )
     (property "Value" "+10V" (id 1) (at 262.89 87.8355 0))

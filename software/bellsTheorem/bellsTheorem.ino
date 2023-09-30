@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Frogleg Synthesis/Pete Hartman
+ * Copyright (c) 2023 Frogleg Synthesis/Pete Hartman
  * 
  * Many thanks due to Jim Matheson for advice and coaching on how to work with Teensy, as well as some of the hardware details
  * This project wouldn't have been undertaken without the questions from Nyles Miszczyk on Facebook's Synth DIY group, about Bell's Theorem
@@ -79,7 +79,6 @@ const unsigned short PROGMEM cos2Table[] = { // 3E8 == 1000 decimal
   0x1E,  0x18,  0x13,  0xF,   0xB,   0x8,   0x5,   0x3,   0x1,   0x0,   0x0
 };
 
-
 // Global variables for the encoders that are saved between calls:
 const uint8_t encPins[8] = {ENCAA, ENCAB, ENCBA, ENCBB, ENCCA, ENCCB, ENCDA, ENCDB};//encoder pins defined above
 static uint8_t enc_PrevNextCode[4] = {0, 0, 0, 0};//used by enc driver
@@ -97,6 +96,10 @@ Bounce *debounce[4] = {&debA, &debB, &debC, &debD} ;
 
 byte resolution = 10;
 uint16_t maximumOutput = pow(2,resolution)-1;
+
+// the following arrays all align
+// value[0] corresponds to pinTable[0] corresponds to pixelTable[0]
+// these are the actual value, the pin for the output to a jack, and the pixel number for an LED
 // we start at 0 degrees, so everything is maxed out (until such time as we start taking input)
 // first 4 are zero trying to take LEDs on the encoders out of the current draw
 uint16_t value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
@@ -110,9 +113,19 @@ byte pinTable[13] = {
   A, B, C, D, AB, BC, CD, DA, ABC, BCD, CDA, DAB, ABCD
 };
 
+// 2023-03-16 pixel numbers are being shuffled because the WS2811 chips cannot come before
+// any of the standalone LEDs; some brands (e.g. EMSL) of the LEDs don't work if they're
+// positioned after the WS2811 chips.
+//
 // what are the pixel numbers of each position; now includes chip drivers for encoders
+// the order below matches the hacked up re-ordered LED order, NOT the final version on PCB
+
+// version 5 == 0.5, 6 == 0.6, presumably 10 will be 1.0 :)
+#define hwversion 5
+
+// 0.6 order
 byte pixelTable[13] = {
-  0, 12, 10, 4, 7, 11, 5, 1, 8, 9, 3, 2, 6
+  12, 9, 10, 11, 5, 8, 3, 0, 6, 7, 2, 1, 4
 };
 
 // WS2811 setup
@@ -150,7 +163,11 @@ OctoWS2811 leds(ledsPerStrip, displayMemory, drawingMemory, WS2811_RGB | WS2811_
 #define YELLOW 0x4B4B00
 #define PINK   0x4B0528
 #define ORANGE 0x471A00
-#define WHITE  0x4B4B4B
+#define WHITE  0x6B6B6B
+// the knobs seem to need a bit more
+#define BRIGHTWHITE 0x6B6B6B
+#define knobBright 180
+#define ledBright 120
 
 int HueTable[13] = { YELLOW, BLUE, GREEN, RED, YELLOW, YELLOW, YELLOW, YELLOW, ORANGE, ORANGE, ORANGE, ORANGE, RED }; 
 
@@ -180,6 +197,13 @@ bool inFlags[5] = { false, false, false, false, false };
 ADC *adc = new ADC();
 
 void setup() {
+  if (hwversion == 5) { // hw 0.5
+    pixelTable[0] = 10;
+    pixelTable[2] = 12; 
+  } else { // right now just version 0.6
+     // do nothing, we set it up correctly in the definition
+  }
+  
   // enable the 3.3V regulator!
   pinMode(ENA33, OUTPUT);
   digitalWrite(ENA33, HIGH);
@@ -283,7 +307,11 @@ void loop() {
     // display output doesn't have to track as accurately as the actual output
     if (outChanged) {
       for (int i = 0; i < 13; i++ ) {
-        brightness = (int)((value[i]>>4)*75)/255;
+        if (i >=4) {
+          brightness = (int)((value[i]>>4)*ledBright)/255; // *Bright values set up at the top to make
+        } else { // knobs need a bit of a bump in brightness // easier to adjust
+          brightness = (int)((value[i]>>4)*knobBright)/255;
+        }
         leds.setPixel(pixelTable[i], brightness + (brightness<<8) + (brightness<<16));
         delayMicroseconds(250);
       }
@@ -332,7 +360,7 @@ void doIO() {  // violates the rules of "don't call other stuff"
     // Serial.println("complete");
     //if (current != 0) { 
       inValues[current] = adc->adc1->readSingle();
-    //} else { // don't invert main in (ONLY FOR REV 0.5+)
+    //} else { // don't invert main in (ONLY FOR REV 0.5+) <<< ? need to revisit this 
       inValues[current] = maximumOutput - inValues[current]; 
     //}
     current++;
@@ -384,7 +412,8 @@ void doIO() {  // violates the rules of "don't call other stuff"
 }
 
 /*
- * Input protection with the MCP600X chips changes my input range to -10V = 0, 0V = half, 10V = full
+ * Input protection with the MCP600X chips changes my input range to -10V = 0, 0V = half, 10V = full 
+ * ... except I don't think it does  I'm dividing the input /3 and buffering it with the 0 - 3.3V op amps
  */
 void getControl() {
     for (int k=0; k<4; k++) { // looping through the values table
@@ -431,12 +460,12 @@ void startupSeq() {
   for (int i = 0; i < 13; i++) {
     leds.setPixel(pixelTable[i], HueTable[i]);
     leds.show();
-    delayMicroseconds(300000); //
+    delayMicroseconds(250000); //
   }
   for (int i = 0; i < 13; i++) {
     leds.setPixel(pixelTable[i], 0);
     leds.show();
-    delayMicroseconds(250);
+    delayMicroseconds(200);
   }
   return;
 }

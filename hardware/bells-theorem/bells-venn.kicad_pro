@@ -44,8 +44,8 @@
         "silk_text_thickness": 0.15,
         "silk_text_upright": false,
         "zones": {
-          "45_degree_only": true,
-          "min_clearance": 0.508
+          "45_degree_only": false,
+          "min_clearance": 0.0
         }
       },
       "diff_pair_dimensions": [
@@ -384,10 +384,16 @@
           "+12V",
           "+3V3",
           "+5V",
+          "-10V",
           "GND",
+          "Net-(C19-Pad2)",
           "Net-(D1-Pad2)",
+          "Net-(D2-Pad1)",
+          "Net-(J1-Pad1)",
           "Net-(J1-Pad10)",
-          "Net-(J1-Pad11)"
+          "Net-(J1-Pad11)",
+          "Net-(J24-Pad1)",
+          "Net-(R101-Pad2)"
         ],
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "schematic_color": "rgba(0, 0, 0, 0.000)",

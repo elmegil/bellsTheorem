@@ -1,26 +1,28 @@
 
 
-#include <Wire.h>
 #include <Bounce2.h>
-//#include <ADC.h> // super complex and not very well documented afaict
-#include <EEPROM.h> // for saving state
-#include <Adafruit_NeoPixel.h>
+#include <EEPROM.h> // for saving state, eventually
+//#include <Adafruit_NeoPixel.h>
+// convert to use Paul's OctoWS2811 library instead
+#include <OctoWS2811.h>
+#include <ADC.h>
+#include <IntervalTimer.h>
+
 
 /*
- * EEPROM notes
- * 
- * EEPROM.Put(address, object)
- * EEPROM.Get(address, object)
- * 
- * use sizeof(object) to increment the address
- * no specific address map, just an array of bytes
- */
+   EEPROM notes
 
-#define DEBUG 1
+   EEPROM.Put(address, object)
+   EEPROM.Get(address, object)
 
-//
-// New revision of the board 0.3 now uses pin 20 as a NeoPixel serial control for the LEDs *except* the 
-// LEDs for the encoders.
+   use sizeof(object) to increment the address
+   no specific address map, just an array of bytes
+*/
+
+//#define DEBUG 1
+
+// New revision of the board 0.4+ uses pin 20 as a NeoPixel serial control for the LEDs *including* the
+// LEDs for the encoders (by way of WS2811 chips)
 //
 
 //  pins used
@@ -55,8 +57,12 @@
 #define DAB 22
 #define ABCD 24
 #define NP 20
-// there are 9, but in the prototype there's an extra one used for level shifting
+// there are 9, but in the prototype there's an extra one used for level shifting (???)
 #define PC 13
+#define ENA33 10
+
+
+
 
 // stuff for bell's Theorem testing
 // fixed point, 3 digit representation of cosine squared, for integer angles 0 - 90
@@ -142,7 +148,7 @@ const uint16_t PROGMEM gamma10[] = {
    986, 988, 991, 993, 996, 998,1001,1003,1006,1008,1011,1013,1016,1018,1021,1023,
   };
 
-
+// ^^ unused ?
 
 
 // Global variables for the encoders that are saved between calls:
@@ -163,6 +169,7 @@ Bounce *debounce[4] = {&debA, &debB, &debC, &debD} ;
 byte cv_in_pins[4] = { CVA, CVB, CVC, CVD };
 long cv_values[4] = { 0, 0, 0, 0 };
 
+byte resolution = 10;
 const unsigned short maximumOutput = 0x3FF; //1023
 // we start at 0 degrees, so everything is maxed out (until such time as we start taking input)
 short value[13] = { maximumOutput, maximumOutput, maximumOutput, maximumOutput,
@@ -174,249 +181,132 @@ byte pinTable[13] = {
   A, B, C, D, AB, BC, CD, DA, ABC, BCD, CDA, DAB, ABCD
 };
 
-unsigned short inputValue = maximumOutput;                    
+// what are the pixel numbers of each position; now includes chip drivers for encoders
+byte pixelTable[13] = {
+  0, 12, 10, 4, 7, 11, 5, 1, 8, 9, 3, 2, 6
+};
 
-const short angleScale = 2; // scale the encoder magnitude, otherwise you spend forever to go 180 degrees
-long angle[4] = { 0, 0, 0, 0 };  // absolute angle of each encoder
-long savedAngle[4] = { 0, 0, 0, 0 }; // "undo" of unintentional clicks
-long relativeAngle[6] = { 0, 0, 0, 0, 0, 0 }; // relative angle of each pair A->B, B->C, C->D, D->A, plus A->C and B->D
-long angle_sum[4] = { 0, 0, 0, 0 }; // hold angle + cv
+// WS2811 setup
+// Any group of digital pins may be used
+const int numPins = 1;
+byte pinList[numPins] = {20};
+const int ledsPerStrip = 13;
 
-// Declare our NeoPixel strip object:
-Adafruit_NeoPixel strip(PC, NP, NEO_RGB + NEO_KHZ800);
-// Argument 1 = Number of pixels in NeoPixel strip
-// Argument 2 = Arduino pin number (most are valid)
-// Argument 3 = Pixel type flags, add together as needed:
-//   NEO_KHZ800  800 KHz bitstream (most NeoPixel products w/WS2812 LEDs)
-//   NEO_KHZ400  400 KHz (classic 'v1' (not v2) FLORA pixels, WS2811 drivers)
-//   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
-//   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
-//   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
+// These buffers need to be large enough for all the pixels.
+// The total number of pixels is "ledsPerStrip * numPins".
+// Each pixel needs 3 bytes, so multiply by 3.  An "int" is
+// 4 bytes, so divide by 4.  The array is created using "int"
+// so the compiler will align it to 32 bit memory.
+DMAMEM int displayMemory[ledsPerStrip * numPins * 3 / 4];
+int drawingMemory[ledsPerStrip * numPins * 3 / 4];
 
-//int brights[13] = { 0, 16, 32, 48, 64, 80, 96, 128, 160, 176, 192, 224, 255 };
-int brights[13] = { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255 };
-int incr[13] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-short encbrights[4] = { 0, 341, 682, 1023 };
-short encincr[4] = { 4, 4, 4, 4 };
+
+// some PIXELS are 400KHz, some are 800KHz.
+OctoWS2811 leds(ledsPerStrip, displayMemory, drawingMemory, WS2811_RGB | WS2811_800kHz, numPins, pinList);
+
+// decimal 75 (brightness determined previously, 75/255) is 0x4B
+#define RED    0x4B0000
+#define GREEN  0x004B00
+#define BLUE   0x00004B
+#define YELLOW 0x4B4B00
+#define PINK   0x4B0528
+#define ORANGE 0x471A00
+#define MYWHITE  0x4B4B4B
+
+int HueTable[13] = { RED, ORANGE, YELLOW, GREEN, BLUE, MYWHITE, PINK, RED, ORANGE, YELLOW, GREEN, BLUE, MYWHITE }; 
+
+
+uint16_t inputValue = maximumOutput;
+uint16_t prevValue = maximumOutput;
+boolean inChanged = false; // if nothing changes, why do any extra work?
+boolean outChanged = false; // if nothing changes, why do any extra work?
+
+const uint16_t angleScale = 2; // scale the encoder magnitude, otherwise you spend forever to go 180 degrees 
+int16_t angle[4] = { 0, 0, 0, 0 };  // absolute angle of each encoder
+int16_t prevAngle[4] = { 0, 0, 0, 0 }; // see if we changed
+int16_t savedAngle[4] = { 0, 0, 0, 0 }; // "undo" of unintentional clicks
+int16_t relativeAngle[6] = { 0, 0, 0, 0, 0, 0 }; // relative angle of each pair A->B, B->C, C->D, D->A, plus A->C and B->D
+int16_t angle_sum[4] = { 0, 0, 0, 0 }; // hold angle + cv
+
+IntervalTimer ioTimer, ctlTimer;
+
+int brightness;  // since we are using "white" we need to be able to set this up at each byte of the RGB set and map to correct level
+
+//
+// ADC lib setup
+//
+byte inPins[5] = { CV_IN, CVA, CVB, CVC, CVD };
+uint16_t inValues[5] = { 0, 0, 0, 0, 0 };
+bool inFlags[5] = { false, false, false, false, false };
+
+ADC *adc = new ADC();
 
 void setup() {  
-  for (int i=0; i<4; i++) {
+  // enable the 3.3V regulator!
+  pinMode(ENA33, OUTPUT);
+  digitalWrite(ENA33, HIGH); 
+
+  // set up for encoder button debouncing
+  for (int i = 0; i < 4; i++) {
     debounce[i]->attach(enc_button_pins[i], INPUT);
-    debounce[i]->interval(25); // 25ms ebounce time
+    debounce[i]->interval(25); // 25ms debounce time
   }
-  
-  for (int i=0; i<13; i++) {
-    // pinMode(pinTable[i], OUTPUT); // not necessary and actually "OUTPUT" is a digital output
-    analogWriteFrequency(pinTable[i], 146484);
-  }
-  analogWriteResolution(10);
 
-  for (int i=0; i<4; i++) {
-    pinMode(cv_in_pins[i], INPUT);
+  // analog write
+  for (int i = 0; i < 13; i++) {
+    analogWriteFrequency(pinTable[i], 146484.38); // was 146484.38
   }
-  pinMode(CV_IN, INPUT);
-  analogReadRes(10); // 10 bit resolution
-  analogReadAveraging(3); // just pick a number to try and reduce jitter
+  analogWriteResolution(resolution);
 
+  // input setup
+  for (int i = 0; i < 5; i++) {
+    pinMode(inPins[i], INPUT); 
+  }
+ 
+  // for DEBUG if needed
   Serial.begin(115200);
   Serial.println("Bell's Theorem startup");
   Serial.print(F("F_CPU = "));
-  Serial.print(F_CPU,DEC);
+  Serial.print(F_CPU, DEC);
   Serial.println();
+  Serial.println(maximumOutput);
 
-  // NeoPixel LEDs
-  strip.begin();
-  strip.show();
-  // brightness of 255 has total current draw around 469mA (just running LEDs)
-  // brightness of 128 has total current draw around 341mA (just running LEDs)
-  // brigthness of 96 has total current draw around 285mA (just running LEDs)
-  // brightness of 80 has total current draw around 256mA (just running LEDs)
-  // brightness of 75 has a max current draw around 247mA (just running LEDs)
-  strip.setBrightness(75); // 0 - 255; 75 seems plenty bright
-  //strip.clear();
+  // OctoWS2811 library
+  leds.begin();
+  leds.show();
 
-  for (int i = 0; i < 4; i++) {
-    analogWrite(pinTable[i], 0);
-  }
-  delay(1000);
-  for (int i = 0; i < 4; i++) {
-    analogWrite(pinTable[i], gamma10[512]);
-  }
-  delay(1000);
-  for (int i = 0; i < 4; i++) {
-    analogWrite(pinTable[i], 1023);
-  }
-  delay(1000);
-  for (int i = 0; i < 4; i++) {
-    analogWrite(pinTable[i], gamma10[512]);
-  }
-  delay(1000);
-  for (int i = 0; i < 4; i++) {
-    analogWrite(pinTable[i], 0);
-  }
+  startupSeq(); // eventually something to blink lights and show we're alive
+  Serial.println("startup done");
 }
-
-// for checking loop times
-long lastMicros = 0;
-long curMicros = 0;
-
-// color definitions
-#define RED 0
-#define GREEN 21845
-#define BLUE 43690
 
 
 void loop() { 
-  for (int i = 0; i < strip.numPixels(); i++) {
-        // strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(brights[i] * 255, 255, 255)));
-        strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(0, 0, brights[i])));
-        brights[i] += incr[i];
-        if (brights[i] > 255) {
-          brights[i] = 254;
-          incr[i] = -1;
-        }
-        if (brights[i] < 0) {
-          brights[i] = 1;
-          incr[i] = 1;
-        }
-    strip.show();
-    //delay(10);
+  startupSeq();
+  delay(2);
+}
+
+
+void startupSeq() {
+  for (int testPixel = 0; testPixel < 13; testPixel++) {
+    for (int i = 0; i < 13; i++) {
+      Serial.print("setting led ");
+      Serial.print(testPixel);
+      Serial.print(" to color ");
+      Serial.print(i);
+      Serial.println();
+      leds.setPixel(testPixel, HueTable[i]);
+      leds.show();
+      delayMicroseconds(300000); //
+    }
+    //for (int i = 0; i < 13; i++) {
+      int i = 0;
+      Serial.print("unsetting led ");
+      Serial.print(testPixel);
+      Serial.println();
+      leds.setPixel(testPixel, 0);
+      leds.show();
+      delayMicroseconds(250);
   }
-//  for (int i = 0; i < 4; i++) {
-//    analogWrite(pinTable[i], gamma10[encbrights[i]]);
-//    encbrights[i] += encincr[i];
-//    if (encbrights[i] > 1023) {
-//      encbrights[i] = 1020;
-//      encincr[i] = -4;
-//    }
-//    if (encbrights[i] < 0) {
-//      encbrights[i] = 3;
-//      encincr[i] = 4;
-//    }
-//  }
-////   curMicros = micros();
-////   Serial.print("Loop time: "); Serial.println(curMicros - lastMicros);
-////   lastMicros = curMicros;
-//  //Serial.println("updating buttons");
-//  // consider long press saving to EEPROM or restoring from EEPROM
-//  // use duration() method later for mode changes
-//  for (int i=0; i < 4; i++) {
-//    debounce[i]->update();
-//    if (debounce[i]->fell()) {
-//      // Serial.print("got button press "); Serial.print(i); Serial.println();
-//      if (savedAngle[i] == 0) { // we don't have a saved angle
-//        savedAngle[i] = angle[i];
-//        angle[i] = 0;
-//      } else {  // we do have a saved angle, let's restore it
-//        angle[i] = savedAngle[i];
-//        savedAngle[i] = 0;
-//      }
-//    }
-//    
-////    long prevAngle = angle[i];
-//    angle[i] = constrainAngle(angle[i] + read_rotary(i) * angleScale);
-//    cv_values[i] = (long)(analogRead(cv_in_pins[i]) * .176);  // .176 is ~ 180 degrees / 1023 ; CV is 0 - 180 degrees
-//    //cv_values[i] = 0;  // THERE IS SIGNIFICNANT JITTER IN THE ANALOG READ HERE
-//    angle_sum[i] = constrainAngle(cv_values[i] + angle[i]);
-////    if (prevAngle != angle[i]) {
-////      Serial.print("angle "); Serial.print(i); Serial.print(" : "); Serial.print(angle[i]); Serial.println();
-////    }
-//  }
-//   
-//  // ok angle is set, now check the relationship to adjacent lenses
-//  for (int i = 0; i < 4; i++) {  
-////    long prevRelAngle = relativeAngle[i];
-//    relativeAngle[i] = constrainAngle(angle_sum[mod(i+1,4)] - angle_sum[i]); // maximum difference is 360
-////    if (prevRelAngle != relativeAngle[i]) {
-////      Serial.print("relative angle "); Serial.print(i); Serial.print(" : "); Serial.print(relativeAngle[i]); Serial.println();
-////    }
-//  }
-//  // now to do A->C and B->D for doing CDA (actually ACD) and DAB (actually ABD)
-//  relativeAngle[4] = constrainAngle(angle_sum[2] - angle_sum[0]); // C - A
-//  relativeAngle[5] = constrainAngle(angle_sum[3] - angle_sum[1]); // D - B
-//
-//  inputValue = analogRead(CV_IN); 
-//  //Serial.println(inputValue);
-//  //inputValue = 1023; // for now we're going to see how well the various bits work
-//  
-//  for (int i = 0; i < 4; i++) {  // and now we want to do the real calculations based on the relative angles + the CV inputs
-//    value[i] = (short)((inputValue * cos2Table[constrainCos2(angle_sum[i])]) / 1000);                          
-//    analogWrite(pinTable[i], value[i]);
-//    if ((i+4) < 7) {
-//      value[i+4] = (short)((value[i] * cos2Table[constrainCos2(relativeAngle[i])]) / 1000);
-//    } else { // position 7 is DA, should use A value * AD angle, not D value * AD angle
-//      value[i+4] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[i])]) / 1000);
-//    }
-//    analogWrite(pinTable[i+4], value[i+4]);
-//    switch (i+8) {
-//      case 10:  // CDA actually is ACD -- need to double check we don't get overflow here
-//        value[10] = (short)((value[0] * cos2Table[constrainCos2(relativeAngle[4])] * cos2Table[constrainCos2(relativeAngle[2])]) / 1000000);
-//        break;
-//      case 11:  // DAB actually is ABD
-//        value[11] = (short)((value[4] * cos2Table[constrainCos2(relativeAngle[5])]) / 1000);
-//        break;
-//      default:
-//      value[i+8] = (short)((value[i+4] * cos2Table[constrainCos2(relativeAngle[mod(i+1,4)])]) / 1000);
-//    }
-//    analogWrite(pinTable[i+8], value[i+8]);
-//  }
-//  // still gotta do ABCD
-//  value[12] = (short)((value[8] * cos2Table[constrainCos2(relativeAngle[2])])/1000);
-//  analogWrite(pinTable[12], value[12]);
-//
-//  // tracking the actual values -- when we start it should be all 1023, but it doesn't LOOK like it
-////  for (int i = 0; i < 13; i++) {
-////    Serial.print(value[i]); Serial.print(":");
-////  }
-////  Serial.println(); 
-}
-
-
-// abs(90 - abs( x - 90 )) reflects 0 - 180 to 0-90,90-0 and 0 - (-180) to the same
-short constrainCos2(short angle) {
-  return (abs(90 - abs(abs(angle) - 90)));
-}
-
-long constrainAngle(long angle) {  // limit angles to -180 to +180
-  if (angle > 180) {
-      angle -= 180;
-  } else if (angle < -180) {
-      angle += 180;
-  }
-  return(angle);
-}
-
-// funky modulus appropriate for wrapping at 0, instead of -modulus; good for wrapping around arrays
-int mod( int x, int y ){
-   return (x<0 ? ((x+1)%y)+y-1 : x%y);
-}
-
-// Jim Matheson's encoder driver
-// A vald CW or  CCW move returns 1 or -1 , invalid returns 0.
-// adapted from original code by John Main - best-microcontroller-projects.com
-//
-//when you call this you get 1,0,or -1 depending on how the encoder was moved.
-
-int8_t read_rotary(uint8_t num) {
-  static int8_t rot_enc_table[] = {0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0};
-
-  enc_PrevNextCode[num] <<= 2;
-  if (!ENC_DIRECTION){//forward
-    if (digitalReadFast(encPins[num<<1])) enc_PrevNextCode[num] |= 0x02;
-    if (digitalReadFast(encPins[(num<<1)+1])) enc_PrevNextCode[num] |= 0x01;
-  } else {//reverse
-    if (digitalReadFast(encPins[num<<1])) enc_PrevNextCode[num] |= 0x02;
-    if (digitalReadFast(encPins[(num<<1)+1])) enc_PrevNextCode[num] |= 0x01;
-  }
-  enc_PrevNextCode[num] &= 0x0f;
-
-   // If valid then store as 16 bit data.
-   if  (rot_enc_table[enc_PrevNextCode[num]] ) {
-      enc_Store[num] <<= 4;
-      enc_Store[num] |= enc_PrevNextCode[num];
-      if ((enc_Store[num]&0xff)==0x2b) return -1;
-      if ((enc_Store[num]&0xff)==0x17) return 1;
-   }
-   return 0;
+  return;
 }
   
