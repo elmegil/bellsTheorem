@@ -387,13 +387,12 @@
           "-10V",
           "GND",
           "Net-(C19-Pad2)",
-          "Net-(D1-Pad2)",
           "Net-(D2-Pad1)",
           "Net-(J1-Pad1)",
           "Net-(J1-Pad10)",
-          "Net-(J1-Pad11)",
           "Net-(J24-Pad1)",
-          "Net-(R101-Pad2)"
+          "Net-(R101-Pad2)",
+          "Net-(R102-Pad2)"
         ],
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "schematic_color": "rgba(0, 0, 0, 0.000)",
