@@ -380,19 +380,15 @@
         "microvia_drill": 0.1,
         "name": "power",
         "nets": [
-          "+10V",
           "+12V",
           "+3V3",
           "+5V",
-          "-10V",
+          "-12V",
           "GND",
-          "Net-(C19-Pad2)",
           "Net-(D2-Pad1)",
           "Net-(J1-Pad1)",
           "Net-(J1-Pad10)",
-          "Net-(J24-Pad1)",
-          "Net-(R101-Pad2)",
-          "Net-(R102-Pad2)"
+          "Net-(J24-Pad1)"
         ],
         "pcb_color": "rgba(0, 0, 0, 0.000)",
         "schematic_color": "rgba(0, 0, 0, 0.000)",

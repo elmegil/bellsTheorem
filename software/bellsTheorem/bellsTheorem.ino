@@ -14,6 +14,13 @@
 #include <ADC.h>
 #include <IntervalTimer.h>
 
+    
+    /*                                                                *******
+     * CHANGE THE RANGE TO MAP -5 - +5 to 0 - 3.3V instead of 0 - 10  *******
+     *                                                                *******
+     * Needs adjustments to the input op amps.                        *******
+     */
+
 
 /*
    EEPROM notes
@@ -121,12 +128,14 @@ byte pinTable[13] = {
 // the order below matches the hacked up re-ordered LED order, NOT the final version on PCB
 
 // version 5 == 0.5, 6 == 0.6, presumably 10 will be 1.0 :)
-#define hwversion 5
+#define hwversion 6
 
 // 0.6 order
 byte pixelTable[13] = {
   12, 9, 10, 11, 5, 8, 3, 0, 6, 7, 2, 1, 4
 };
+
+
 
 // WS2811 setup
 // Any group of digital pins may be used
@@ -169,7 +178,7 @@ OctoWS2811 leds(ledsPerStrip, displayMemory, drawingMemory, WS2811_RGB | WS2811_
 #define knobBright 180
 #define ledBright 120
 
-int HueTable[13] = { YELLOW, BLUE, GREEN, RED, YELLOW, YELLOW, YELLOW, YELLOW, ORANGE, ORANGE, ORANGE, ORANGE, RED }; 
+int HueTable[13] = { YELLOW, BLUE, GREEN, RED, YELLOW, BLUE, GREEN, RED, YELLOW, BLUE, GREEN, RED, ORANGE }; 
 
 uint16_t inputValue = maximumOutput;
 uint16_t prevValue = maximumOutput;
@@ -460,8 +469,10 @@ void startupSeq() {
   for (int i = 0; i < 13; i++) {
     leds.setPixel(pixelTable[i], HueTable[i]);
     leds.show();
+    Serial.println(pixelTable[i]);
     delayMicroseconds(250000); //
   }
+  delayMicroseconds(250000000);
   for (int i = 0; i < 13; i++) {
     leds.setPixel(pixelTable[i], 0);
     leds.show();
